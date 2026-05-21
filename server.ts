@@ -3,203 +3,45 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = "sk_mdjwnNCia8w7WzdCsqvcXjHJXG6WBRtE";
+// ====================
+// Types
+// ====================
 
-function mapToMediaItem(item: any) {
-    return {
-        id: item.id,
-        name: item.name,
-        type: item.type,
-        source: item.source,
-        url: item.url,
-        thumbnailUrl: item.thumbnailUrl,
-        folderId: item.folderId,
-        tags: item.tags,
-        size: item.size,
-        width: item.width,
-        height: item.height,
-        format: item.format,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        uploadedBy: item.uploadedBy,
-        aiPrompt: item.aiPrompt,
-        aiStyle: item.aiStyle,
-        aiModel: item.aiModel,
-        linkedContentId: item.linkedContentId,
-        linkedContentTitle: item.linkedContentTitle,
-    };
-}
+type MediaItem = {
+    id: string;
+    name: string;
+    type: string;
+    source: string;
+    url: string;
+    thumbnailUrl: string;
+    folderId: string | null;
+    tags: string[];
+    size: number;
+    width?: number;
+    height?: number;
+    format: string;
+    createdAt: string;
+    updatedAt: string;
+    uploadedBy: string;
+    aiPrompt?: string;
+    aiStyle?: string;
+    aiModel?: string;
+    linkedContentId?: string;
+    linkedContentTitle?: string;
+};
 
-function mapToMediaFolder(folder: any) {
-    return {
-        id: folder.id,
-        name: folder.name,
-        parentId: folder.parentId,
-        itemCount: folder.itemCount,
-        createdAt: folder.createdAt,
-    };
-}
-const placeholder = "/placeholder.svg";
+type MediaFolder = {
+    id: string;
+    name: string;
+    parentId: string | null;
+    itemCount: number;
+    createdAt: string;
+};
 
-app.get("/api/media-items", async (_, res) => {
-    try {
-        const mediaItems = [
-            // Upload items
-            {
-                id: "media-001", name: "hero-banner-q1.jpg", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-2",
-                tags: ["banner", "hero", "Q1"], size: 524288, width: 1920, height: 1080, format: "jpg",
-                createdAt: "2025-01-12", updatedAt: "2025-01-12", uploadedBy: "Admin User",
-            },
-            {
-                id: "media-002", name: "team-photo.png", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-6",
-                tags: ["team", "about"], size: 1048576, width: 2400, height: 1600, format: "png",
-                createdAt: "2025-01-20", updatedAt: "2025-01-20", uploadedBy: "Editor A",
-            },
-            {
-                id: "media-003", name: "product-demo.mp4", type: "video", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-4",
-                tags: ["demo", "product"], size: 52428800, duration: 120, format: "mp4",
-                createdAt: "2025-02-05", updatedAt: "2025-02-05", uploadedBy: "Admin User",
-            },
-            {
-                id: "media-004", name: "brand-guidelines.pdf", type: "document", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-5",
-                tags: ["brand", "guidelines"], size: 3145728, format: "pdf",
-                createdAt: "2025-02-15", updatedAt: "2025-02-15", uploadedBy: "Admin User",
-            },
-            {
-                id: "media-005", name: "social-template-ig.jpg", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-3",
-                tags: ["social", "instagram", "template"], size: 245760, width: 1080, height: 1080, format: "jpg",
-                createdAt: "2025-02-18", updatedAt: "2025-02-18", uploadedBy: "Editor B",
-            },
-            {
-                id: "media-006", name: "blog-cover-seo.jpg", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-2",
-                tags: ["blog", "SEO", "cover"], size: 409600, width: 1200, height: 630, format: "jpg",
-                createdAt: "2025-03-01", updatedAt: "2025-03-01", uploadedBy: "Admin User",
-            },
-            {
-                id: "media-007", name: "tutorial-part1.mp4", type: "video", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-4",
-                tags: ["tutorial", "onboarding"], size: 104857600, duration: 300, format: "mp4",
-                createdAt: "2025-03-02", updatedAt: "2025-03-02", uploadedBy: "Editor A",
-            },
-            {
-                id: "media-008", name: "pitch-deck.pdf", type: "document", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-5",
-                tags: ["pitch", "investor"], size: 5242880, format: "pdf",
-                createdAt: "2025-03-03", updatedAt: "2025-03-03", uploadedBy: "Admin User",
-            },
-            {
-                id: "media-009", name: "thumbnail-ep12.jpg", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-1",
-                tags: ["thumbnail", "youtube"], size: 184320, width: 1280, height: 720, format: "jpg",
-                createdAt: "2025-03-04", updatedAt: "2025-03-04", uploadedBy: "Editor B",
-            },
-            {
-                id: "media-010", name: "fb-ad-creative.png", type: "image", source: "upload",
-                url: placeholder, thumbnailUrl: placeholder, folderId: "folder-3",
-                tags: ["facebook", "ad", "creative"], size: 327680, width: 1200, height: 628, format: "png",
-                createdAt: "2025-03-05", updatedAt: "2025-03-05", uploadedBy: "Admin User",
-            },
-
-            // AI Generated items
-            {
-                id: "media-ai-001", name: "ai-thumbnail-crypto.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "crypto", "thumbnail"], size: 307200, width: 1280, height: 720, format: "jpg",
-                createdAt: "2025-02-20", updatedAt: "2025-02-20", uploadedBy: "AI Agent",
-                aiPrompt: "A futuristic digital landscape with Bitcoin symbols floating in a neon-lit cityscape",
-                aiStyle: "Cinematic", aiModel: "flux.dev",
-                linkedContentId: "CT-001", linkedContentTitle: "Bitcoin Q1 2025 Analysis",
-            },
-            {
-                id: "media-ai-002", name: "ai-blog-cover-ai-trends.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "trends", "blog"], size: 409600, width: 1200, height: 630, format: "jpg",
-                createdAt: "2025-02-25", updatedAt: "2025-02-25", uploadedBy: "AI Agent",
-                aiPrompt: "Abstract neural network visualization with flowing data streams in purple and cyan tones",
-                aiStyle: "Illustration", aiModel: "flux2.dev",
-                linkedContentId: "CT-003", linkedContentTitle: "AI Trends 2025",
-            },
-            {
-                id: "media-ai-003", name: "ai-social-defi.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "defi", "social"], size: 245760, width: 1080, height: 1080, format: "jpg",
-                createdAt: "2025-03-01", updatedAt: "2025-03-01", uploadedBy: "AI Agent",
-                aiPrompt: "Decentralized finance concept art showing interconnected blockchain nodes with golden light",
-                aiStyle: "Realistic", aiModel: "flux.schnell",
-                linkedContentId: "CT-005", linkedContentTitle: "DeFi Deep Dive",
-            },
-            {
-                id: "media-ai-004", name: "ai-banner-metaverse.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "metaverse", "banner"], size: 512000, width: 1920, height: 1080, format: "jpg",
-                createdAt: "2025-03-03", updatedAt: "2025-03-03", uploadedBy: "AI Agent",
-                aiPrompt: "Immersive metaverse environment with virtual avatars and holographic interfaces",
-                aiStyle: "Cinematic", aiModel: "flux.dev",
-            },
-            {
-                id: "media-ai-005", name: "ai-infographic-web3.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "web3", "infographic"], size: 368640, width: 1080, height: 1350, format: "jpg",
-                createdAt: "2025-03-05", updatedAt: "2025-03-05", uploadedBy: "AI Agent",
-                aiPrompt: "Clean infographic style showing Web3 ecosystem layers with icons and connecting lines",
-                aiStyle: "Illustration", aiModel: "flux2.dev",
-                linkedContentId: "CT-008", linkedContentTitle: "Web3 Ecosystem Overview",
-            },
-            {
-                id: "media-ai-006", name: "ai-thumb-nft-guide.jpg", type: "image", source: "ai-generated",
-                url: placeholder, thumbnailUrl: placeholder, folderId: null,
-                tags: ["ai", "nft", "guide"], size: 286720, width: 1280, height: 720, format: "jpg",
-                createdAt: "2025-03-06", updatedAt: "2025-03-06", uploadedBy: "AI Agent",
-                aiPrompt: "Colorful NFT art gallery with digital frames floating in space, vibrant colors",
-                aiStyle: "Realistic", aiModel: "flux.dev",
-            },
-        ];
-        res.json({
-            success: true,
-            data: [mediaItems],
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: "Failed to fetch media items",
-        });
-    }
-});
-
-app.get("/api/media-folders", async (_, res) => {
-    try {
-        const folders = [
-            mapToMediaFolder({
-                id: "ai-images",
-                name: "AI Images",
-                parentId: null,
-                itemCount: 1,
-                createdAt: new Date().toISOString(),
-            }),
-        ];
-
-        res.json({
-            success: true,
-            data: folders,
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: "Failed to fetch media folders",
-        });
-    }
-});
-type MockUser = {
+type User = {
     id: string;
     name: string;
     email: string;
@@ -226,82 +68,80 @@ type ActivityEntry = {
     ip: string;
 };
 
-const mockUsers: MockUser[] = [
+type AiUsage = {
+    role: string;
+    tokens: number;
+};
+
+// ====================
+// In-memory DB
+// ====================
+
+const placeholder = "/placeholder.svg";
+
+let mediaItems: MediaItem[] = [
     {
-        id: "1",
-        name: "Nguyễn Minh Tuấn",
-        email: "tuan@metapress.vn",
-        initials: "NT",
-        role: "Admin",
-        team: "Product",
-        status: "active",
-        lastLogin: "2025-06-15 09:23",
-        aiTokensUsed: 45200,
-        aiTokensLimit: 100000,
+        id: "media-001", name: "hero-banner-q1.jpg", type: "image", source: "upload",
+        url: placeholder, thumbnailUrl: placeholder, folderId: "folder-2",
+        tags: ["banner", "hero", "Q1"], size: 524288, width: 1920, height: 1080, format: "jpg",
+        createdAt: "2025-01-12", updatedAt: "2025-01-12", uploadedBy: "Admin User",
     },
     {
-        id: "2",
-        name: "Trần Thị Mai",
-        email: "mai@metapress.vn",
-        initials: "TM",
-        role: "Editor",
-        team: "Content",
-        status: "active",
-        lastLogin: "2025-06-15 08:45",
-        aiTokensUsed: 32800,
-        aiTokensLimit: 50000,
+        id: "media-002", name: "team-photo.png", type: "image", source: "upload",
+        url: placeholder, thumbnailUrl: placeholder, folderId: "folder-6",
+        tags: ["team", "about"], size: 1048576, width: 2400, height: 1600, format: "png",
+        createdAt: "2025-01-20", updatedAt: "2025-01-20", uploadedBy: "Editor A",
+    },
+    {
+        id: "media-ai-001", name: "ai-thumbnail-crypto.jpg", type: "image", source: "ai-generated",
+        url: placeholder, thumbnailUrl: placeholder, folderId: null,
+        tags: ["ai", "crypto", "thumbnail"], size: 307200, width: 1280, height: 720, format: "jpg",
+        createdAt: "2025-02-20", updatedAt: "2025-02-20", uploadedBy: "AI Agent",
+        aiPrompt: "A futuristic digital landscape", aiStyle: "Cinematic", aiModel: "flux.dev",
+    },
+];
+
+let mediaFolders: MediaFolder[] = [
+    { id: "folder-1", name: "Thumbnails", parentId: null, itemCount: 3, createdAt: "2025-01-01" },
+    { id: "folder-2", name: "Banners", parentId: null, itemCount: 2, createdAt: "2025-01-01" },
+    { id: "folder-3", name: "Social Media", parentId: null, itemCount: 5, createdAt: "2025-01-01" },
+    { id: "ai-images", name: "AI Images", parentId: null, itemCount: 1, createdAt: new Date().toISOString() },
+];
+
+let users: User[] = [
+    {
+        id: "1", name: "Nguyễn Minh Tuấn", email: "tuan@metapress.vn",
+        initials: "NT", role: "Admin", team: "Product", status: "active",
+        lastLogin: "2025-06-15 09:23", aiTokensUsed: 45200, aiTokensLimit: 100000,
+    },
+    {
+        id: "2", name: "Trần Thị Mai", email: "mai@metapress.vn",
+        initials: "TM", role: "Editor", team: "Content", status: "active",
+        lastLogin: "2025-06-15 08:45", aiTokensUsed: 32800, aiTokensLimit: 50000,
     },
 ];
 
 const PERMISSION_ACTIONS = [
-    "Create Content",
-    "Edit Content",
-    "Publish",
-    "Delete",
-    "Manage Users",
-    "View Analytics",
-    "AI Usage",
-    "Settings",
+    "Create Content", "Edit Content", "Publish", "Delete",
+    "Manage Users", "View Analytics", "AI Usage", "Settings",
 ];
 
-const permissionMatrix: Permission[] = PERMISSION_ACTIONS.map(
-    (action) => ({
-        action,
-        roles: {
-            Admin: true,
-            Editor: [
-                "Create Content",
-                "Edit Content",
-                "Publish",
-                "View Analytics",
-                "AI Usage",
-            ].includes(action),
-            Writer: [
-                "Create Content",
-                "Edit Content",
-                "AI Usage",
-            ].includes(action),
-            Reviewer: [
-                "Edit Content",
-                "View Analytics",
-            ].includes(action),
-            Viewer: ["View Analytics"].includes(action),
-        },
-    })
-);
-
-const activityLog: ActivityEntry[] = [
-    {
-        id: "1",
-        timestamp: "2025-06-15 10:30",
-        user: "Cao Minh Đức",
-        action: "Login",
-        target: "System",
-        ip: "192.168.1.45",
+let permissionMatrix: Permission[] = PERMISSION_ACTIONS.map((action) => ({
+    action,
+    roles: {
+        Admin: true,
+        Editor: ["Create Content", "Edit Content", "Publish", "View Analytics", "AI Usage"].includes(action),
+        Writer: ["Create Content", "Edit Content", "AI Usage"].includes(action),
+        Reviewer: ["Edit Content", "View Analytics"].includes(action),
+        Viewer: ["View Analytics"].includes(action),
     },
+}));
+
+let activityLog: ActivityEntry[] = [
+    { id: "1", timestamp: "2025-06-15 10:30", user: "Cao Minh Đức", action: "Login", target: "System", ip: "192.168.1.45" },
 ];
 
-const aiUsageByRole = [
+let aiUsageByRole: AiUsage[] = [
     { role: "Admin", tokens: 97200 },
     { role: "Editor", tokens: 54100 },
     { role: "Writer", tokens: 63500 },
@@ -309,40 +149,350 @@ const aiUsageByRole = [
     { role: "Viewer", tokens: 1200 },
 ];
 
-// routes
-app.get("/", (_, res) => {
-    res.json({
-        message: "MetaPress Mock API running",
-    });
+// ====================
+// Helpers
+// ====================
+
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const now = () => new Date().toISOString();
+
+const notFound = (res: express.Response, entity: string) =>
+    res.status(404).json({ success: false, error: `${entity} not found` });
+
+const success = (res: express.Response, data: unknown, status = 200) =>
+    res.status(status).json({ success: true, data });
+
+// ====================
+// Media Items CRUD
+// ====================
+
+// GET all
+app.get("/api/media-items", (_, res) => {
+    success(res, mediaItems);
 });
 
+// GET by id
+app.get("/api/media-items/:id", (req, res) => {
+    const item = mediaItems.find((i) => i.id === req.params.id);
+    if (!item) return notFound(res, "Media item");
+    success(res, item);
+});
+
+// POST create
+app.post("/api/media-items", (req, res) => {
+    const body = req.body;
+    const newItem: MediaItem = {
+        id: generateId("media"),
+        name: body.name ?? "Untitled",
+        type: body.type ?? "image",
+        source: body.source ?? "upload",
+        url: body.url ?? placeholder,
+        thumbnailUrl: body.thumbnailUrl ?? placeholder,
+        folderId: body.folderId ?? null,
+        tags: body.tags ?? [],
+        size: body.size ?? 0,
+        width: body.width,
+        height: body.height,
+        format: body.format ?? "jpg",
+        createdAt: now(),
+        updatedAt: now(),
+        uploadedBy: body.uploadedBy ?? "Unknown",
+        aiPrompt: body.aiPrompt,
+        aiStyle: body.aiStyle,
+        aiModel: body.aiModel,
+        linkedContentId: body.linkedContentId,
+        linkedContentTitle: body.linkedContentTitle,
+    };
+    mediaItems.push(newItem);
+    success(res, newItem, 201);
+});
+
+// PATCH update
+app.patch("/api/media-items/:id", (req, res) => {
+    const index = mediaItems.findIndex((i) => i.id === req.params.id);
+    if (index === -1) return notFound(res, "Media item");
+    mediaItems[index] = { ...mediaItems[index], ...req.body, updatedAt: now() };
+    success(res, mediaItems[index]);
+});
+
+// DELETE
+app.delete("/api/media-items/:id", (req, res) => {
+    const index = mediaItems.findIndex((i) => i.id === req.params.id);
+    if (index === -1) return notFound(res, "Media item");
+    const deleted = mediaItems.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// Media Folders CRUD
+// ====================
+
+// GET all
+app.get("/api/media-folders", (_, res) => {
+    success(res, mediaFolders);
+});
+
+// GET by id
+app.get("/api/media-folders/:id", (req, res) => {
+    const folder = mediaFolders.find((f) => f.id === req.params.id);
+    if (!folder) return notFound(res, "Media folder");
+    success(res, folder);
+});
+
+// POST create
+app.post("/api/media-folders", (req, res) => {
+    const body = req.body;
+    const newFolder: MediaFolder = {
+        id: generateId("folder"),
+        name: body.name ?? "New Folder",
+        parentId: body.parentId ?? null,
+        itemCount: 0,
+        createdAt: now(),
+    };
+    mediaFolders.push(newFolder);
+    success(res, newFolder, 201);
+});
+
+// PATCH update
+app.patch("/api/media-folders/:id", (req, res) => {
+    const index = mediaFolders.findIndex((f) => f.id === req.params.id);
+    if (index === -1) return notFound(res, "Media folder");
+    mediaFolders[index] = { ...mediaFolders[index], ...req.body };
+    success(res, mediaFolders[index]);
+});
+
+// DELETE
+app.delete("/api/media-folders/:id", (req, res) => {
+    const index = mediaFolders.findIndex((f) => f.id === req.params.id);
+    if (index === -1) return notFound(res, "Media folder");
+    const deleted = mediaFolders.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// Users CRUD
+// ====================
+
+// GET all
 app.get("/api/users", (_, res) => {
-    res.json(mockUsers);
+    success(res, users);
 });
 
+// GET by id
+app.get("/api/users/:id", (req, res) => {
+    const user = users.find((u) => u.id === req.params.id);
+    if (!user) return notFound(res, "User");
+    success(res, user);
+});
+
+// POST create
+app.post("/api/users", (req, res) => {
+    const body = req.body;
+    if (!body.email) {
+        return res.status(400).json({ success: false, error: "email is required" });
+    }
+    if (users.find((u) => u.email === body.email)) {
+        return res.status(409).json({ success: false, error: "Email already exists" });
+    }
+    const newUser: User = {
+        id: generateId("user"),
+        name: body.name ?? "New User",
+        email: body.email,
+        initials: body.initials ?? body.name?.slice(0, 2).toUpperCase() ?? "NU",
+        role: body.role ?? "Viewer",
+        team: body.team ?? "",
+        status: body.status ?? "active",
+        lastLogin: now(),
+        aiTokensUsed: 0,
+        aiTokensLimit: body.aiTokensLimit ?? 10000,
+    };
+    users.push(newUser);
+    success(res, newUser, 201);
+});
+
+// PATCH update
+app.patch("/api/users/:id", (req, res) => {
+    const index = users.findIndex((u) => u.id === req.params.id);
+    if (index === -1) return notFound(res, "User");
+    users[index] = { ...users[index], ...req.body };
+    success(res, users[index]);
+});
+
+// DELETE
+app.delete("/api/users/:id", (req, res) => {
+    const index = users.findIndex((u) => u.id === req.params.id);
+    if (index === -1) return notFound(res, "User");
+    const deleted = users.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// Permissions CRUD
+// ====================
+
+// GET all
 app.get("/api/permissions", (_, res) => {
-    res.json(permissionMatrix);
+    success(res, permissionMatrix);
 });
 
-app.get("/api/activity-log", (_, res) => {
-    res.json(activityLog);
+// GET by action
+app.get("/api/permissions/:action", (req, res) => {
+    const permission = permissionMatrix.find(
+        (p) => p.action.toLowerCase() === decodeURIComponent(req.params.action).toLowerCase()
+    );
+    if (!permission) return notFound(res, "Permission");
+    success(res, permission);
 });
 
+// POST create new action
+app.post("/api/permissions", (req, res) => {
+    const { action, roles } = req.body;
+    if (!action) return res.status(400).json({ success: false, error: "action is required" });
+    if (permissionMatrix.find((p) => p.action === action)) {
+        return res.status(409).json({ success: false, error: "Action already exists" });
+    }
+    const newPermission: Permission = {
+        action,
+        roles: roles ?? { Admin: true, Editor: false, Writer: false, Reviewer: false, Viewer: false },
+    };
+    permissionMatrix.push(newPermission);
+    success(res, newPermission, 201);
+});
+
+// PATCH update roles for an action
+app.patch("/api/permissions/:action", (req, res) => {
+    const index = permissionMatrix.findIndex(
+        (p) => p.action.toLowerCase() === decodeURIComponent(req.params.action).toLowerCase()
+    );
+    if (index === -1) return notFound(res, "Permission");
+    permissionMatrix[index] = {
+        ...permissionMatrix[index],
+        roles: { ...permissionMatrix[index].roles, ...req.body.roles },
+    };
+    success(res, permissionMatrix[index]);
+});
+
+// DELETE action
+app.delete("/api/permissions/:action", (req, res) => {
+    const index = permissionMatrix.findIndex(
+        (p) => p.action.toLowerCase() === decodeURIComponent(req.params.action).toLowerCase()
+    );
+    if (index === -1) return notFound(res, "Permission");
+    const deleted = permissionMatrix.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// Activity Log CRUD
+// ====================
+
+// GET all (hỗ trợ filter ?user= &action=)
+app.get("/api/activity-log", (req, res) => {
+    let result = [...activityLog];
+    if (req.query.user) result = result.filter((a) => a.user === req.query.user);
+    if (req.query.action) result = result.filter((a) => a.action === req.query.action);
+    success(res, result);
+});
+
+// GET by id
+app.get("/api/activity-log/:id", (req, res) => {
+    const entry = activityLog.find((a) => a.id === req.params.id);
+    if (!entry) return notFound(res, "Activity entry");
+    success(res, entry);
+});
+
+// POST create
+app.post("/api/activity-log", (req, res) => {
+    const body = req.body;
+    const newEntry: ActivityEntry = {
+        id: generateId("log"),
+        timestamp: now(),
+        user: body.user ?? "Unknown",
+        action: body.action ?? "",
+        target: body.target ?? "",
+        ip: body.ip ?? "0.0.0.0",
+    };
+    activityLog.push(newEntry);
+    success(res, newEntry, 201);
+});
+
+// PATCH update
+app.patch("/api/activity-log/:id", (req, res) => {
+    const index = activityLog.findIndex((a) => a.id === req.params.id);
+    if (index === -1) return notFound(res, "Activity entry");
+    activityLog[index] = { ...activityLog[index], ...req.body };
+    success(res, activityLog[index]);
+});
+
+// DELETE
+app.delete("/api/activity-log/:id", (req, res) => {
+    const index = activityLog.findIndex((a) => a.id === req.params.id);
+    if (index === -1) return notFound(res, "Activity entry");
+    const deleted = activityLog.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// AI Usage CRUD
+// ====================
+
+// GET all
 app.get("/api/ai-usage", (_, res) => {
-    res.json(aiUsageByRole);
+    success(res, aiUsageByRole);
 });
 
-// optional
+// GET by role
+app.get("/api/ai-usage/:role", (req, res) => {
+    const entry = aiUsageByRole.find(
+        (a) => a.role.toLowerCase() === req.params.role.toLowerCase()
+    );
+    if (!entry) return notFound(res, "AI usage entry");
+    success(res, entry);
+});
+
+// POST create
+app.post("/api/ai-usage", (req, res) => {
+    const { role, tokens } = req.body;
+    if (!role) return res.status(400).json({ success: false, error: "role is required" });
+    if (aiUsageByRole.find((a) => a.role.toLowerCase() === role.toLowerCase())) {
+        return res.status(409).json({ success: false, error: "Role already exists" });
+    }
+    const newEntry: AiUsage = { role, tokens: tokens ?? 0 };
+    aiUsageByRole.push(newEntry);
+    success(res, newEntry, 201);
+});
+
+// PATCH update tokens
+app.patch("/api/ai-usage/:role", (req, res) => {
+    const index = aiUsageByRole.findIndex(
+        (a) => a.role.toLowerCase() === req.params.role.toLowerCase()
+    );
+    if (index === -1) return notFound(res, "AI usage entry");
+    aiUsageByRole[index] = { ...aiUsageByRole[index], ...req.body };
+    success(res, aiUsageByRole[index]);
+});
+
+// DELETE
+app.delete("/api/ai-usage/:role", (req, res) => {
+    const index = aiUsageByRole.findIndex(
+        (a) => a.role.toLowerCase() === req.params.role.toLowerCase()
+    );
+    if (index === -1) return notFound(res, "AI usage entry");
+    const deleted = aiUsageByRole.splice(index, 1)[0];
+    success(res, deleted);
+});
+
+// ====================
+// Dashboard (read-only)
+// ====================
+
 app.get("/api/dashboard", (_, res) => {
-    res.json({
-        users: mockUsers,
-        permissions: permissionMatrix,
-        activityLog,
-        aiUsageByRole,
-    });
+    success(res, { users, permissions: permissionMatrix, activityLog, aiUsageByRole });
+});
+
+app.get("/", (_, res) => {
+    res.json({ message: "MetaPress Mock API running" });
 });
 
 const PORT = process.env.PORT || 3006;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
