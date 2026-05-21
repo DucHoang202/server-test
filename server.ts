@@ -253,8 +253,7 @@ app.get("/api/dashboard", (_, res) => {
     });
 });
 
-const PORT = 3000;
-
+const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
