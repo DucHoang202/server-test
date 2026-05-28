@@ -1,0 +1,202 @@
+{
+    "topic_id": "TOPIC-2026-001",
+    "language": "vi",
+    "editorial_type": "tin_nhanh",
+    "sport_context": {
+        "sport": "Bóng rổ",
+        "league_or_level": "Premier League",
+        "scope_detected": "vietnam",
+        "scope_confidence": "high"
+    },
+    "synthesis_data": {
+        "verified_facts": [
+            {
+                "fact_id": "F-001",
+                "text": "Manchester City giữ tỷ lệ kiểm soát bóng trung bình trên 63% trong 10 trận cuối mùa.",
+                "source_refs": [
+                    "SRC-001"
+                ],
+                "source_count": 1,
+                "confidence": "high"
+            },
+            {
+                "fact_id": "F-002",
+                "text": "Arsenal để thủng lưới nhiều hơn ở các tình huống phản công nhanh so với nửa đầu mùa.",
+                "source_refs": [
+                    "SRC-002"
+                ],
+                "source_count": 1,
+                "confidence": "high"
+            },
+            {
+                "fact_id": "F-003",
+                "text": "Chấn thương của Declan Rice ảnh hưởng đáng kể đến khả năng thu hồi bóng của Arsenal.",
+                "source_refs": [
+                    "SRC-003"
+                ],
+                "source_count": 1,
+                "confidence": "high"
+            },
+            {
+                "fact_id": "F-004",
+                "text": "Pep Guardiola đã điều chỉnh cấu trúc pressing để giảm tải cho Rodri.",
+                "source_refs": [
+                    "SRC-004"
+                ],
+                "source_count": 1,
+                "confidence": "medium"
+            },
+            {
+                "fact_id": "F-005",
+                "text": "Khả năng Arsenal bổ sung tiền vệ phòng ngự trong kỳ chuyển nhượng hè vẫn chưa rõ ràng.",
+                "source_refs": [
+                    "SRC-005"
+                ],
+                "source_count": 1,
+                "confidence": "medium"
+            },
+            {
+                "fact_id": "F-006",
+                "text": "Thông tin chấn thương và đội hình có thể thay đổi sát ngày thi đấu.",
+                "source_refs": [
+                    "SRC-006"
+                ],
+                "source_count": 1,
+                "confidence": "medium"
+            },
+            {
+                "fact_id": "F-007",
+                "text": "Một số nhận định chiến thuật chưa được xác nhận trực tiếp từ HLV.",
+                "source_refs": [
+                    "SRC-007"
+                ],
+                "source_count": 1,
+                "confidence": "medium"
+            }
+        ],
+        "claims_to_verify": [
+            {
+                "claim_id": "C-001",
+                "text": "Pep Guardiola đã điều chỉnh cấu trúc pressing để giảm tải cho Rodri.",
+                "source_refs": [
+                    "SRC-006"
+                ],
+                "source_count": 1,
+                "confidence": "medium",
+                "verify_hint": "Kiểm tra phân tích chiến thuật từ The Athletic và thống kê pressing phases."
+            }
+        ]
+    },
+    "selected_angle": {
+        "title": "Arsenal có thực sự thiếu bản lĩnh vô địch Premier League?",
+        "central_question": "Liệu vấn đề của Arsenal nằm ở tâm lý hay chất lượng đội hình?",
+        "differentiation": "Khai thác góc nhìn tâm lý thi đấu và áp lực đường dài thay vì thuần chiến thuật."
+    },
+    "outline": {
+        "selected_headline": {
+            "text": "Vì sao Arsenal hụt hơi trước Manchester City ở giai đoạn quyết định?",
+            "dimension": "dat_cau_hoi"
+        },
+        "standfirst": "Arsenal từng có thời điểm nắm lợi thế lớn trong cuộc đua vô địch Premier League 2025/26. Tuy nhiên, sự ổn định, chiều sâu đội hình và khả năng kiểm soát trận đấu của Manchester City đã tạo ra khác biệt ở giai đoạn quyết định.",
+        "intro": {
+            "structure_type": "hook_problem",
+            "components": [
+                {
+                    "label": "hook",
+                    "content": "Khi Premier League bước vào giai đoạn cuối mùa, áp lực bắt đầu bào mòn mọi sai lầm nhỏ nhất."
+                },
+                {
+                    "label": "problem",
+                    "content": "Arsenal một lần nữa đánh mất lợi thế trong cuộc đua vô địch dù từng dẫn đầu bảng xếp hạng."
+                },
+                {
+                    "label": "direction",
+                    "content": "Khác biệt không chỉ nằm ở kết quả, mà còn ở cách Manchester City duy trì sự ổn định chiến thuật và chiều sâu đội hình."
+                }
+            ]
+        },
+        "sections": [
+            {
+                "section_id": "SEC-001",
+                "title": "Arsenal đã đánh mất quyền kiểm soát cuộc đua như thế nào?",
+                "goal": "Thiết lập bối cảnh cuộc đua vô địch và thời điểm Arsenal bắt đầu sa sút.",
+                "narrative_role": "thiet_lap",
+                "connection_to_previous": null,
+                "key_points_to_cover": [
+                    "KP-001"
+                ],
+                "fact_refs": [
+                    "F-001",
+                    "F-002"
+                ],
+                "claim_refs": [],
+                "differentiation": "Tập trung vào diễn biến cuộc đua thay vì chỉ thống kê kết quả.",
+                "length_hint": "trung bình",
+                "transition_to_next": "Sự sa sút đó bắt nguồn từ nhiều vấn đề chiến thuật và nhân sự."
+            },
+            {
+                "section_id": "SEC-002",
+                "title": "Chiều sâu đội hình trở thành khác biệt lớn nhất",
+                "goal": "Phân tích ảnh hưởng của chấn thương và khả năng xoay tua đội hình.",
+                "narrative_role": "phat_trien",
+                "connection_to_previous": "Sau khi mất lợi thế, Arsenal bắt đầu bộc lộ giới hạn lực lượng.",
+                "key_points_to_cover": [
+                    "KP-002"
+                ],
+                "fact_refs": [
+                    "F-003"
+                ],
+                "claim_refs": [],
+                "differentiation": "Nhấn mạnh yếu tố thể lực và lịch thi đấu dày đặc cuối mùa.",
+                "length_hint": "dài",
+                "transition_to_next": "Nhưng chiều sâu đội hình chỉ là một phần của vấn đề."
+            },
+            {
+                "section_id": "SEC-003",
+                "title": "Manchester City duy trì sự ổn định chiến thuật ra sao?",
+                "goal": "Làm rõ cách Pep Guardiola điều chỉnh chiến thuật ở giai đoạn cuối mùa.",
+                "narrative_role": "doi_chieu",
+                "connection_to_previous": "Trong khi Arsenal hụt hơi, Manchester City lại tăng tốc đúng thời điểm.",
+                "key_points_to_cover": [
+                    "KP-001",
+                    "KP-003"
+                ],
+                "fact_refs": [
+                    "F-001"
+                ],
+                "claim_refs": [
+                    "C-001"
+                ],
+                "differentiation": "Đưa góc nhìn tactical analysis thay vì narrative thông thường.",
+                "length_hint": "dài",
+                "transition_to_next": "Những khác biệt đó dẫn tới câu hỏi lớn hơn về bản lĩnh vô địch."
+            },
+            {
+                "section_id": "SEC-004",
+                "title": "Đây là thất bại chiến thuật hay vấn đề bản lĩnh?",
+                "goal": "Mở rộng tranh luận sang yếu tố tâm lý và kinh nghiệm đường dài.",
+                "narrative_role": "mo_rong",
+                "connection_to_previous": "Yếu tố chiến thuật không hoàn toàn giải thích được cú hụt hơi của Arsenal.",
+                "key_points_to_cover": [
+                    "KP-003"
+                ],
+                "fact_refs": [
+                    "F-002"
+                ],
+                "claim_refs": [],
+                "differentiation": "Kết hợp góc nhìn tâm lý thi đấu với phân tích chuyên môn.",
+                "length_hint": "trung bình",
+                "transition_to_next": "Dù nguyên nhân là gì, Arsenal vẫn đang đứng trước một bài toán lớn cho mùa giải tới."
+            }
+        ],
+        "conclusion": {
+            "structure_type": "ket_phan_tich",
+            "goal": "Tổng hợp nguyên nhân Arsenal thất bại và mở ra góc nhìn cho mùa giải tiếp theo.",
+            "key_takeaways": [
+                "Manchester City tạo khác biệt bằng sự ổn định và chiều sâu đội hình.",
+                "Arsenal vẫn thiếu kinh nghiệm duy trì áp lực vô địch đường dài.",
+                "Cuộc đua mùa tới sẽ phụ thuộc vào khả năng nâng cấp lực lượng của Arsenal."
+            ]
+        }
+    }
+}
