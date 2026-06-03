@@ -1,0 +1,59 @@
+{
+  "costCategories": [
+    {
+      "id": "CC-001",
+      "name": "AIIIIIII",
+      "description": "Chi phí sử dụng AI models",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-002",
+      "name": "Nhân sự",
+      "description": "Lương, phụ cấp biên tập viên",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-003",
+      "name": "Media",
+      "description": "Ảnh, video, infographic",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-004",
+      "name": "Outsource",
+      "description": "Thuê ngoài viết bài, dịch thuật",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-005",
+      "name": "Phân phối",
+      "description": "Quảng cáo, boost post",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-006",
+      "name": "Tools",
+      "description": "SaaS, hosting, analytics tools",
+      "active": true,
+      "createdAt": "2025-01-01"
+    },
+    {
+      "id": "CC-007",
+      "name": "Khác",
+      "description": "Chi phí phát sinh khác",
+      "active": true,
+      "createdAt": "2025-01-01"
+    }
+  ],
+  "revenueCategories": [],
+  "costEntries": [],
+  "revenueEntries": [],
+  "rateCards": [],
+  "tokenUsageLogs": [],
+  "auditLogs": []
+}

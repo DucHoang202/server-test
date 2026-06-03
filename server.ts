@@ -4,6 +4,33 @@ import cors from "cors";
 import { Request, Response, NextFunction } from "express";
 import writingStepRouter from "./draft-step";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+    apiIntegrations as initialApiIntegrations,
+    aiProviders as initialAiProviders,
+    aiTaskConfigs as initialAiTaskConfigs,
+    webhooks as initialWebhooks,
+    generalSettings as initialGeneralSettings,
+    tokenLimitsPerRole,
+    aiParams as initialAiParams,
+} from './mock/settings-mock-data';
+import {
+    setupChecklist as initialSetupChecklist,
+    editorialModelMapping as initialEditorial,
+    seoModelMapping as initialSeo,
+    promptTemplates as initialPromptTemplates,
+    approvalRules as initialApprovalRules,
+    mediaPolicy as initialMediaPolicy,
+    workflowSteps as initialWorkflowSteps,
+    socialChannels as initialSocialChannels,
+    channelTemplates as initialChannelTemplates,
+    channelPublishRules as initialChannelPublishRules,
+    taxonomy as initialTaxonomy,
+    notificationRules as initialNotificationRules,
+    auditLogs as initialAuditLogs,
+    knowledgeSources as initialKnowledgeSources,
+    quotaConfig as initialQuotaConfig,
+    assetFinanceConfig as initialAssetFinanceConfig,
+} from './mock/project-config-mock-data';
 
 const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -839,11 +866,6 @@ function fail(
 // IN-MEMORY STORE  (replace with DB in production)
 // ─────────────────────────────────────────────
 
-const store = {
-    step2: new Map(), // topic_id → synthesis_ready payload
-    step3: new Map(), // topic_id → angles_ready payload
-    step4: new Map(), // topic_id → outline_ready payload
-};
 
 // ─────────────────────────────────────────────
 // ROUTES — GET (schema + stored result)
@@ -2095,7 +2117,7 @@ let notificationRules = [
     { id: '4', event: 'quota.exceeded', channel: 'email', recipients: ['admin@metapress.vn', 'finance@metapress.vn'] },
 ];
 
-let auditLogs = [
+let auditLogs1 = [
     { id: '1', timestamp: '2025-06-15 09:45:12', user: 'Admin', action: 'UPDATE', target: 'AI Provider - OpenAI', oldValue: 'GPT-4o Mini', newValue: 'GPT-4o' },
     { id: '2', timestamp: '2025-06-15 09:30:00', user: 'Admin', action: 'ENABLE', target: 'Social Channel - YouTube', oldValue: 'disabled', newValue: 'enabled' },
     { id: '3', timestamp: '2025-06-14 18:20:00', user: 'Editor', action: 'CREATE', target: 'Approval Rule - Social Post', oldValue: '—', newValue: 'Auto-approve enabled' },
@@ -2137,7 +2159,7 @@ function addAuditLog(user, action, target, oldValue, newValue) {
         oldValue,
         newValue
     };
-    auditLogs = [newEntry, ...auditLogs];
+    auditLogs1 = [newEntry, ...auditLogs1];
 }
 
 // ── 1. CHECKLIST OVERVIEW ────────────────────────────────────────────
@@ -2504,6 +2526,1014 @@ app.get('/api/setup-checklist/audit-logs', (req, res) => {
     res.json({ data: auditLogs });
 });
 
+//----13
+
+
+// =============================================================
+// TypeScript Interfaces
+// =============================================================
+interface CostCategory {
+    id: string;
+    name: string;
+    description: string;
+    active: boolean;
+    createdAt: string;
+}
+
+interface RevenueCategory {
+    id: string;
+    name: string;
+    description: string;
+    active: boolean;
+    createdAt: string;
+}
+
+interface RateCard {
+    id: string;
+    provider: string;
+    model: string;
+    inputPricePer1k: number;
+    outputPricePer1k: number;
+    currency: string;
+    updatedAt: string;
+}
+
+interface TokenUsageLog {
+    id: string;
+    agent: string;
+    model: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    editorialItemId?: string;
+    publishedItemId?: string;
+    date: string;
+}
+
+interface CostEntry {
+    id: string;
+    amount: number;
+    currency: string;
+    categoryId: string;
+    categoryName: string;
+    date: string;
+    note: string;
+    publishedItemId?: string;
+    publishedItemTitle?: string;
+    projectId?: string;
+    projectName?: string;
+    status: string;
+    createdBy: string;
+    approvedBy?: string;
+    lockedAt?: string;
+    voidReason?: string;
+    isAdjustment: boolean;
+    adjustmentReason?: string;
+    originalEntryId?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface RevenueEntry {
+    id: string;
+    amount: number;
+    currency: string;
+    categoryId: string;
+    categoryName: string;
+    date: string;
+    note: string;
+    publishedItemId?: string;
+    publishedItemTitle?: string;
+    projectId?: string;
+    projectName?: string;
+    status: string;
+    createdBy: string;
+    approvedBy?: string;
+    lockedAt?: string;
+    voidReason?: string;
+    isAdjustment: boolean;
+    adjustmentReason?: string;
+    originalEntryId?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface AuditLogEntry {
+    id: string;
+    action: string;
+    entityType: string;
+    entityId: string;
+    description: string;
+    userId: string;
+    userName: string;
+    timestamp: string;
+}
+
+// =============================================================
+// Local Database State (Mutable in-memory DB)
+// =============================================================
+let costCategories: CostCategory[] = [
+    { id: "CC-001", name: "AI", description: "Chi phí sử dụng AI models", active: true, createdAt: "2025-01-01" },
+    { id: "CC-002", name: "Nhân sự", description: "Lương, phụ cấp biên tập viên", active: true, createdAt: "2025-01-01" },
+    { id: "CC-003", name: "Media", description: "Ảnh, video, infographic", active: true, createdAt: "2025-01-01" },
+    { id: "CC-004", name: "Outsource", description: "Thuê ngoài viết bài, dịch thuật", active: true, createdAt: "2025-01-01" },
+    { id: "CC-005", name: "Phân phối", description: "Quảng cáo, boost post", active: true, createdAt: "2025-01-01" },
+    { id: "CC-006", name: "Tools", description: "SaaS, hosting, analytics tools", active: true, createdAt: "2025-01-01" },
+    { id: "CC-007", name: "Khác", description: "Chi phí phát sinh khác", active: true, createdAt: "2025-01-01" },
+];
+
+let revenueCategories: RevenueCategory[] = [
+    { id: "RC-001", name: "Ads", description: "Doanh thu quảng cáo display/native", active: true, createdAt: "2025-01-01" },
+    { id: "RC-002", name: "Sponsorship", description: "Tài trợ nội dung", active: true, createdAt: "2025-01-01" },
+    { id: "RC-003", name: "PR Deal", description: "Hợp đồng PR/bài trả phí", active: true, createdAt: "2025-01-01" },
+    { id: "RC-004", name: "Subscription Value", description: "Giá trị từ subscriber", active: true, createdAt: "2025-01-01" },
+    { id: "RC-005", name: "Lead Value", description: "Giá trị chuyển đổi lead", active: true, createdAt: "2025-01-01" },
+    { id: "RC-006", name: "Khác", description: "Doanh thu khác", active: true, createdAt: "2025-01-01" },
+];
+
+let rateCards: RateCard[] = [
+    { id: "RATE-001", provider: "OpenAI", model: "GPT-4o", inputPricePer1k: 0.005, outputPricePer1k: 0.015, currency: "USD", updatedAt: "2025-03-01" },
+    { id: "RATE-002", provider: "OpenAI", model: "GPT-4o-mini", inputPricePer1k: 0.00015, outputPricePer1k: 0.0006, currency: "USD", updatedAt: "2025-03-01" },
+    { id: "RATE-003", provider: "Google", model: "Gemini 2.5 Flash", inputPricePer1k: 0.00015, outputPricePer1k: 0.0006, currency: "USD", updatedAt: "2025-03-01" },
+    { id: "RATE-004", provider: "Anthropic", model: "Claude 3.5 Sonnet", inputPricePer1k: 0.003, outputPricePer1k: 0.015, currency: "USD", updatedAt: "2025-03-01" },
+];
+
+let tokenUsageLogs: TokenUsageLog[] = [
+    { id: "TU-001", agent: "research", model: "GPT-4o", provider: "OpenAI", inputTokens: 2500, outputTokens: 3200, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-01" },
+    { id: "TU-002", agent: "angle", model: "GPT-4o", provider: "OpenAI", inputTokens: 1800, outputTokens: 2100, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-01" },
+    { id: "TU-003", agent: "outline", model: "GPT-4o", provider: "OpenAI", inputTokens: 2200, outputTokens: 2800, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-01" },
+    { id: "TU-004", agent: "writer", model: "GPT-4o", provider: "OpenAI", inputTokens: 3500, outputTokens: 5500, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-01" },
+    { id: "TU-005", agent: "editor", model: "GPT-4o-mini", provider: "OpenAI", inputTokens: 4000, outputTokens: 4200, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-02" },
+    { id: "TU-006", agent: "distribution", model: "GPT-4o-mini", provider: "OpenAI", inputTokens: 1200, outputTokens: 1800, editorialItemId: "ED-001", publishedItemId: "PUB-001", date: "2025-03-02" },
+    { id: "TU-007", agent: "research", model: "Gemini 2.5 Flash", provider: "Google", inputTokens: 3000, outputTokens: 3800, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-03" },
+    { id: "TU-008", agent: "angle", model: "Gemini 2.5 Flash", provider: "Google", inputTokens: 1500, outputTokens: 2000, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-03" },
+    { id: "TU-009", agent: "outline", model: "Gemini 2.5 Flash", provider: "Google", inputTokens: 2000, outputTokens: 2500, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-03" },
+    { id: "TU-010", agent: "writer", model: "GPT-4o", provider: "OpenAI", inputTokens: 4000, outputTokens: 6000, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-04" },
+    { id: "TU-011", agent: "editor", model: "GPT-4o-mini", provider: "OpenAI", inputTokens: 3500, outputTokens: 3800, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-04" },
+    { id: "TU-012", agent: "distribution", model: "GPT-4o-mini", provider: "OpenAI", inputTokens: 1000, outputTokens: 1500, editorialItemId: "ED-002", publishedItemId: "PUB-002", date: "2025-03-04" },
+    { id: "TU-013", agent: "research", model: "GPT-4o", provider: "OpenAI", inputTokens: 2800, outputTokens: 3500, editorialItemId: "ED-003", date: "2025-03-05" },
+    { id: "TU-014", agent: "writer", model: "Claude 3.5 Sonnet", provider: "Anthropic", inputTokens: 3800, outputTokens: 5800, editorialItemId: "ED-003", date: "2025-03-06" },
+    { id: "TU-015", agent: "research", model: "GPT-4o", provider: "OpenAI", inputTokens: 2200, outputTokens: 2900, editorialItemId: "ED-004", publishedItemId: "PUB-003", date: "2025-03-07" },
+    { id: "TU-016", agent: "writer", model: "GPT-4o", provider: "OpenAI", inputTokens: 3200, outputTokens: 5200, editorialItemId: "ED-004", publishedItemId: "PUB-003", date: "2025-03-07" },
+];
+
+let costEntries: CostEntry[] = [
+    { id: "COST-001", amount: 150000, currency: "VND", categoryId: "CC-002", categoryName: "Nhân sự", date: "2025-03-01", note: "Phí biên tập bài PUB-001", publishedItemId: "PUB-001", publishedItemTitle: "AI trong báo chí 2025", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-01", updatedAt: "2025-03-02" },
+    { id: "COST-002", amount: 500000, currency: "VND", categoryId: "CC-003", categoryName: "Media", date: "2025-03-02", note: "Mua ảnh stock cho bài", publishedItemId: "PUB-001", publishedItemTitle: "AI trong báo chí 2025", status: "approved", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-02", updatedAt: "2025-03-02" },
+    { id: "COST-003", amount: 2000000, currency: "VND", categoryId: "CC-005", categoryName: "Phân phối", date: "2025-03-03", note: "Boost post Facebook", publishedItemId: "PUB-002", publishedItemTitle: "Xu hướng Content Marketing", projectId: "PRJ-001", projectName: "Dự án AI Media", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-03", updatedAt: "2025-03-03" },
+    { id: "COST-004", amount: 800000, currency: "VND", categoryId: "CC-004", categoryName: "Outsource", date: "2025-03-04", note: "Dịch bài sang tiếng Anh", publishedItemId: "PUB-002", publishedItemTitle: "Xu hướng Content Marketing", status: "draft", createdBy: "Editor 1", isAdjustment: false, createdAt: "2025-03-04", updatedAt: "2025-03-04" },
+    { id: "COST-005", amount: 3500000, currency: "VND", categoryId: "CC-002", categoryName: "Nhân sự", date: "2025-03-05", note: "Lương nhân viên tháng 3 (phân bổ)", projectId: "PRJ-001", projectName: "Dự án AI Media", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-05", updatedAt: "2025-03-05" },
+    { id: "COST-006", amount: 120000, currency: "VND", categoryId: "CC-006", categoryName: "Tools", date: "2025-03-06", note: "Canva Pro subscription (phân bổ)", projectId: "PRJ-001", projectName: "Dự án AI Media", status: "approved", createdBy: "Admin User", isAdjustment: false, createdAt: "2025-03-06", updatedAt: "2025-03-06" },
+    { id: "COST-007", amount: -200000, currency: "VND", categoryId: "CC-003", categoryName: "Media", date: "2025-03-07", note: "Hoàn tiền ảnh stock trùng", publishedItemId: "PUB-001", publishedItemTitle: "AI trong báo chí 2025", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: true, adjustmentReason: "Hoàn tiền do mua trùng license ảnh", originalEntryId: "COST-002", createdAt: "2025-03-07", updatedAt: "2025-03-07" },
+];
+
+let revenueEntries: RevenueEntry[] = [
+    { id: "REV-001", amount: 5000000, currency: "VND", categoryId: "RC-001", categoryName: "Ads", date: "2025-03-05", note: "Google AdSense tháng 3", publishedItemId: "PUB-001", publishedItemTitle: "AI trong báo chí 2025", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-05", updatedAt: "2025-03-05" },
+    { id: "REV-002", amount: 15000000, currency: "VND", categoryId: "RC-002", categoryName: "Sponsorship", date: "2025-03-06", note: "Tài trợ từ TechCorp cho series AI", projectId: "PRJ-001", projectName: "Dự án AI Media", status: "locked", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-06", updatedAt: "2025-03-06" },
+    { id: "REV-003", amount: 8000000, currency: "VND", categoryId: "RC-003", categoryName: "PR Deal", date: "2025-03-07", note: "Bài PR hợp tác BrandX", publishedItemId: "PUB-003", publishedItemTitle: "Review sản phẩm BrandX", status: "approved", createdBy: "Admin User", approvedBy: "Admin User", isAdjustment: false, createdAt: "2025-03-07", updatedAt: "2025-03-07" },
+    { id: "REV-004", amount: 2000000, currency: "VND", categoryId: "RC-005", categoryName: "Lead Value", date: "2025-03-08", note: "5 leads qualified từ bài PUB-002", publishedItemId: "PUB-002", publishedItemTitle: "Xu hướng Content Marketing", projectId: "PRJ-001", projectName: "Dự án AI Media", status: "draft", createdBy: "Editor 1", isAdjustment: false, createdAt: "2025-03-08", updatedAt: "2025-03-08" },
+];
+
+let auditLogs: AuditLogEntry[] = [
+    { id: "AL-001", action: "create", entityType: "cost_entry", entityId: "COST-001", description: "Tạo chi phí nhân sự cho PUB-001", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-01T10:00:00" },
+    { id: "AL-002", action: "approve", entityType: "cost_entry", entityId: "COST-001", description: "Duyệt chi phí COST-001", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-01T14:00:00" },
+    { id: "AL-003", action: "lock", entityType: "cost_entry", entityId: "COST-001", description: "Khóa chi phí COST-001", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-02T09:00:00" },
+    { id: "AL-004", action: "create", entityType: "revenue_entry", entityId: "REV-001", description: "Tạo doanh thu Ads cho PUB-001", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-05T10:00:00" },
+    { id: "AL-005", action: "lock", entityType: "revenue_entry", entityId: "REV-001", description: "Khóa doanh thu REV-001", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-05T15:00:00" },
+    { id: "AL-006", action: "adjustment", entityType: "cost_entry", entityId: "COST-007", description: "Tạo điều chỉnh hoàn tiền ảnh stock", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-07T11:00:00" },
+    { id: "AL-007", action: "recalculate", entityType: "ai_cost", entityId: "RATE-001", description: "Tính lại AI cost sau khi cập nhật rate card", userId: "USR-001", userName: "Admin User", timestamp: "2025-03-08T09:00:00" },
+];
+
+// =============================================================
+// Helper Functions
+// =============================================================
+const getNextId = (prefix: string, list: { id: string }[]): string => {
+    const ids = list
+        .map((item) => {
+            const match = item.id.match(new RegExp(`${prefix}-(\\d+)`));
+            return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter((n) => !isNaN(n));
+    const max = ids.length > 0 ? Math.max(...ids) : 0;
+    return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+};
+
+const mapToSnakeCase = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(mapToSnakeCase);
+    if (obj !== null && typeof obj === "object") {
+        const n: any = {};
+        Object.keys(obj).forEach((key) => {
+            const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+            n[snakeKey] = mapToSnakeCase(obj[key]);
+        });
+        return n;
+    }
+    return obj;
+};
+
+const logAudit = async (action: string, entityType: string, entityId: string, description: string) => {
+    const newLog: AuditLogEntry = {
+        id: getNextId("AL", auditLogs),
+        action,
+        entityType,
+        entityId,
+        description,
+        userId: "USR-001",
+        userName: "Admin User",
+        timestamp: new Date().toISOString(),
+    };
+    auditLogs = [newLog, ...auditLogs];
+    console.log(`[AUDIT LOG] ${action.toUpperCase()} - ${entityType} - ${description}`);
+};
+
+// =============================================================
+// Cost Categories
+// =============================================================
+app.get("/api/assets/cost-categories", (req, res) => {
+    res.json({ data: mapToSnakeCase(costCategories) });
+});
+
+app.post("/api/assets/cost-categories", (req, res) => {
+    const payload = req.body;
+    const newCat: CostCategory = {
+        id: getNextId("CC", costCategories),
+        name: payload.name || "",
+        description: payload.description || "",
+        active: payload.active !== undefined ? Boolean(payload.active) : true,
+        createdAt: new Date().toISOString().slice(0, 10),
+    };
+    costCategories = [newCat, ...costCategories];
+    logAudit("create", "cost_category", newCat.id, `Tạo danh mục chi phí: ${newCat.name}`);
+    res.status(201).json({ data: mapToSnakeCase(newCat) });
+});
+
+app.patch("/api/assets/cost-categories/:id", (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+    const index = costCategories.findIndex((c) => c.id === id);
+    if (index === -1) {
+        return res.status(404).json({ message: `Cost category ${id} not found` });
+    }
+    const current = costCategories[index];
+    if (payload.name !== undefined) current.name = payload.name;
+    if (payload.description !== undefined) current.description = payload.description;
+    if (payload.active !== undefined) current.active = Boolean(payload.active);
+
+    costCategories[index] = current;
+    logAudit("update", "cost_category", id, `Cập nhật danh mục chi phí: ${current.name}`);
+    res.json({ data: mapToSnakeCase(current) });
+});
+
+app.delete("/api/assets/cost-categories/:id", (req, res) => {
+    const { id } = req.params;
+    const cat = costCategories.find((c) => c.id === id);
+    if (!cat) {
+        return res.status(404).json({ message: `Cost category ${id} not found` });
+    }
+    costCategories = costCategories.filter((c) => c.id !== id);
+    logAudit("delete", "cost_category", id, `Xóa danh mục chi phí: ${cat.name}`);
+    res.json({ data: undefined });
+});
+
+// =============================================================
+// Revenue Categories
+// =============================================================
+app.get("/api/assets/revenue-categories", (req, res) => {
+    res.json({ data: mapToSnakeCase(revenueCategories) });
+});
+
+app.post("/api/assets/revenue-categories", (req, res) => {
+    const payload = req.body;
+    const newCat: RevenueCategory = {
+        id: getNextId("RC", revenueCategories),
+        name: payload.name || "",
+        description: payload.description || "",
+        active: payload.active !== undefined ? Boolean(payload.active) : true,
+        createdAt: new Date().toISOString().slice(0, 10),
+    };
+    revenueCategories = [newCat, ...revenueCategories];
+    logAudit("create", "revenue_category", newCat.id, `Tạo danh mục doanh thu: ${newCat.name}`);
+    res.status(201).json({ data: mapToSnakeCase(newCat) });
+});
+
+app.patch("/api/assets/revenue-categories/:id", (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+    const index = revenueCategories.findIndex((c) => c.id === id);
+    if (index === -1) {
+        return res.status(404).json({ message: `Revenue category ${id} not found` });
+    }
+    const current = revenueCategories[index];
+    if (payload.name !== undefined) current.name = payload.name;
+    if (payload.description !== undefined) current.description = payload.description;
+    if (payload.active !== undefined) current.active = Boolean(payload.active);
+
+    revenueCategories[index] = current;
+    logAudit("update", "revenue_category", id, `Cập nhật danh mục doanh thu: ${current.name}`);
+    res.json({ data: mapToSnakeCase(current) });
+});
+
+app.delete("/api/assets/revenue-categories/:id", (req, res) => {
+    const { id } = req.params;
+    const cat = revenueCategories.find((c) => c.id === id);
+    if (!cat) {
+        return res.status(404).json({ message: `Revenue category ${id} not found` });
+    }
+    revenueCategories = revenueCategories.filter((c) => c.id !== id);
+    logAudit("delete", "revenue_category", id, `Xóa danh mục doanh thu: ${cat.name}`);
+    res.json({ data: undefined });
+});
+
+// =============================================================
+// Cost Entries (Transactions)
+// =============================================================
+app.get("/api/assets/cost-entries", (req, res) => {
+    const { categoryId, status, publishedItemId, projectId, dateFrom, dateTo } = req.query;
+    let result = [...costEntries];
+
+    if (categoryId) result = result.filter((e) => e.categoryId === categoryId);
+    if (status) result = result.filter((e) => e.status === status);
+    if (publishedItemId) result = result.filter((e) => e.publishedItemId === publishedItemId);
+    if (projectId) result = result.filter((e) => e.projectId === projectId);
+    if (dateFrom) result = result.filter((e) => e.date >= String(dateFrom));
+    if (dateTo) result = result.filter((e) => e.date <= String(dateTo));
+
+    res.json({ data: mapToSnakeCase(result) });
+});
+
+app.get("/api/assets/cost-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const entry = costEntries.find((e) => e.id === id);
+    if (!entry) return res.status(404).json({ message: "Not found" });
+    res.json({ data: mapToSnakeCase(entry) });
+});
+
+app.post("/api/assets/cost-entries", (req, res) => {
+    const payload = req.body;
+    const newEntry: CostEntry = {
+        id: getNextId("COST", costEntries),
+        amount: Number(payload.amount ?? 0),
+        currency: payload.currency || "VND",
+        categoryId: payload.category_id || "",
+        categoryName: payload.category_name || "",
+        date: payload.date || new Date().toISOString().slice(0, 10),
+        note: payload.note || "",
+        publishedItemId: payload.published_item_id,
+        publishedItemTitle: payload.published_item_title,
+        projectId: payload.project_id,
+        projectName: payload.project_name,
+        status: payload.status || "draft",
+        createdBy: payload.created_by || "Admin User",
+        isAdjustment: Boolean(payload.is_adjustment),
+        adjustmentReason: payload.adjustment_reason,
+        originalEntryId: payload.original_entry_id,
+        createdAt: new Date().toISOString().slice(0, 10),
+        updatedAt: new Date().toISOString().slice(0, 10),
+    };
+    costEntries = [newEntry, ...costEntries];
+
+    let desc = `Tạo giao dịch chi phí: ${newEntry.note} (${newEntry.amount.toLocaleString("vi-VN")} ${newEntry.currency})`;
+    if (newEntry.isAdjustment) {
+        desc = `Tạo giao dịch điều chỉnh chi phí: ${newEntry.note} (${newEntry.amount.toLocaleString("vi-VN")} ${newEntry.currency})`;
+    }
+    logAudit(newEntry.isAdjustment ? "adjustment" : "create", "cost_entry", newEntry.id, desc);
+
+    res.status(201).json({ data: mapToSnakeCase(newEntry) });
+});
+
+app.patch("/api/assets/cost-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+    const index = costEntries.findIndex((e) => e.id === id);
+    if (index === -1) return res.status(404).json({ message: "Not found" });
+
+    const current = costEntries[index];
+
+    if (payload.amount !== undefined) current.amount = Number(payload.amount);
+    if (payload.currency !== undefined) current.currency = payload.currency;
+    if (payload.category_id !== undefined) current.categoryId = payload.category_id;
+    if (payload.category_name !== undefined) current.categoryName = payload.category_name;
+    if (payload.date !== undefined) current.date = payload.date;
+    if (payload.note !== undefined) current.note = payload.note;
+    if (payload.published_item_id !== undefined) current.publishedItemId = payload.published_item_id;
+    if (payload.published_item_title !== undefined) current.publishedItemTitle = payload.published_item_title;
+    if (payload.project_id !== undefined) current.projectId = payload.project_id;
+    if (payload.project_name !== undefined) current.projectName = payload.project_name;
+    if (payload.status !== undefined) current.status = payload.status;
+    if (payload.created_by !== undefined) current.createdBy = payload.created_by;
+    if (payload.approved_by !== undefined) current.approvedBy = payload.approved_by;
+    if (payload.locked_at !== undefined) current.lockedAt = payload.locked_at;
+    if (payload.void_reason !== undefined) current.voidReason = payload.void_reason;
+    if (payload.is_adjustment !== undefined) current.isAdjustment = Boolean(payload.is_adjustment);
+    if (payload.adjustment_reason !== undefined) current.adjustmentReason = payload.adjustment_reason;
+    if (payload.original_entry_id !== undefined) current.originalEntryId = payload.original_entry_id;
+
+    current.updatedAt = new Date().toISOString().slice(0, 10);
+    costEntries[index] = current;
+
+    let action = "update";
+    let desc = `Cập nhật giao dịch chi phí: ${current.note}`;
+
+    if (payload.status) {
+        if (payload.status === "submitted") {
+            action = "submit";
+            desc = `Trình duyệt giao dịch chi phí: ${current.note}`;
+        } else if (payload.status === "approved") {
+            action = "approve";
+            desc = `Duyệt giao dịch chi phí: ${current.note}`;
+            current.approvedBy = "Admin User";
+        } else if (payload.status === "locked") {
+            action = "lock";
+            desc = `Khóa giao dịch chi phí: ${current.note}`;
+            current.lockedAt = new Date().toISOString();
+        } else if (payload.status === "void") {
+            action = "void";
+            desc = `Hủy giao dịch chi phí: ${current.note}. Lý do: ${payload.void_reason || "Không có lý do cụ thể"}`;
+            current.voidReason = payload.void_reason;
+        }
+    }
+
+    logAudit(action, "cost_entry", id, desc);
+    res.json({ data: mapToSnakeCase(current) });
+});
+
+app.delete("/api/assets/cost-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const entry = costEntries.find((e) => e.id === id);
+    if (!entry) return res.status(404).json({ message: "Not found" });
+    if (entry.status === "locked") {
+        return res.status(400).json({ message: "Cannot delete a locked transaction" });
+    }
+    costEntries = costEntries.filter((e) => e.id !== id);
+    logAudit("delete", "cost_entry", id, `Xóa giao dịch chi phí: ${entry.note}`);
+    res.json({ data: undefined });
+});
+
+// =============================================================
+// Revenue Entries (Transactions)
+// =============================================================
+app.get("/api/assets/revenue-entries", (req, res) => {
+    const { categoryId, status, publishedItemId, projectId, dateFrom, dateTo } = req.query;
+    let result = [...revenueEntries];
+
+    if (categoryId) result = result.filter((e) => e.categoryId === categoryId);
+    if (status) result = result.filter((e) => e.status === status);
+    if (publishedItemId) result = result.filter((e) => e.publishedItemId === publishedItemId);
+    if (projectId) result = result.filter((e) => e.projectId === projectId);
+    if (dateFrom) result = result.filter((e) => e.date >= String(dateFrom));
+    if (dateTo) result = result.filter((e) => e.date <= String(dateTo));
+
+    res.json({ data: mapToSnakeCase(result) });
+});
+
+app.get("/api/assets/revenue-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const entry = revenueEntries.find((e) => e.id === id);
+    if (!entry) return res.status(404).json({ message: "Not found" });
+    res.json({ data: mapToSnakeCase(entry) });
+});
+
+app.post("/api/assets/revenue-entries", (req, res) => {
+    const payload = req.body;
+    const newEntry: RevenueEntry = {
+        id: getNextId("REV", revenueEntries),
+        amount: Number(payload.amount ?? 0),
+        currency: payload.currency || "VND",
+        categoryId: payload.category_id || "",
+        categoryName: payload.category_name || "",
+        date: payload.date || new Date().toISOString().slice(0, 10),
+        note: payload.note || "",
+        publishedItemId: payload.published_item_id,
+        publishedItemTitle: payload.published_item_title,
+        projectId: payload.project_id,
+        projectName: payload.project_name,
+        status: payload.status || "draft",
+        createdBy: payload.created_by || "Admin User",
+        isAdjustment: Boolean(payload.is_adjustment),
+        adjustmentReason: payload.adjustment_reason,
+        originalEntryId: payload.original_entry_id,
+        createdAt: new Date().toISOString().slice(0, 10),
+        updatedAt: new Date().toISOString().slice(0, 10),
+    };
+    revenueEntries = [newEntry, ...revenueEntries];
+
+    let desc = `Tạo giao dịch doanh thu: ${newEntry.note} (${newEntry.amount.toLocaleString("vi-VN")} ${newEntry.currency})`;
+    if (newEntry.isAdjustment) {
+        desc = `Tạo giao dịch điều chỉnh doanh thu: ${newEntry.note} (${newEntry.amount.toLocaleString("vi-VN")} ${newEntry.currency})`;
+    }
+    logAudit(newEntry.isAdjustment ? "adjustment" : "create", "revenue_entry", newEntry.id, desc);
+
+    res.status(201).json({ data: mapToSnakeCase(newEntry) });
+});
+
+app.patch("/api/assets/revenue-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+    const index = revenueEntries.findIndex((e) => e.id === id);
+    if (index === -1) return res.status(404).json({ message: "Not found" });
+
+    const current = revenueEntries[index];
+
+    if (payload.amount !== undefined) current.amount = Number(payload.amount);
+    if (payload.currency !== undefined) current.currency = payload.currency;
+    if (payload.category_id !== undefined) current.categoryId = payload.category_id;
+    if (payload.category_name !== undefined) current.categoryName = payload.category_name;
+    if (payload.date !== undefined) current.date = payload.date;
+    if (payload.note !== undefined) current.note = payload.note;
+    if (payload.published_item_id !== undefined) current.publishedItemId = payload.published_item_id;
+    if (payload.published_item_title !== undefined) current.publishedItemTitle = payload.published_item_title;
+    if (payload.project_id !== undefined) current.projectId = payload.project_id;
+    if (payload.project_name !== undefined) current.projectName = payload.project_name;
+    if (payload.status !== undefined) current.status = payload.status;
+    if (payload.created_by !== undefined) current.createdBy = payload.created_by;
+    if (payload.approved_by !== undefined) current.approvedBy = payload.approved_by;
+    if (payload.locked_at !== undefined) current.lockedAt = payload.locked_at;
+    if (payload.void_reason !== undefined) current.voidReason = payload.void_reason;
+    if (payload.is_adjustment !== undefined) current.isAdjustment = Boolean(payload.is_adjustment);
+    if (payload.adjustment_reason !== undefined) current.adjustmentReason = payload.adjustment_reason;
+    if (payload.original_entry_id !== undefined) current.originalEntryId = payload.original_entry_id;
+
+    current.updatedAt = new Date().toISOString().slice(0, 10);
+    revenueEntries[index] = current;
+
+    let action = "update";
+    let desc = `Cập nhật giao dịch doanh thu: ${current.note}`;
+
+    if (payload.status) {
+        if (payload.status === "submitted") {
+            action = "submit";
+            desc = `Trình duyệt giao dịch doanh thu: ${current.note}`;
+        } else if (payload.status === "approved") {
+            action = "approve";
+            desc = `Duyệt giao dịch doanh thu: ${current.note}`;
+            current.approvedBy = "Admin User";
+        } else if (payload.status === "locked") {
+            action = "lock";
+            desc = `Khóa giao dịch doanh thu: ${current.note}`;
+            current.lockedAt = new Date().toISOString();
+        } else if (payload.status === "void") {
+            action = "void";
+            desc = `Hủy giao dịch doanh thu: ${current.note}. Lý do: ${payload.void_reason || "Không có lý do cụ thể"}`;
+            current.voidReason = payload.void_reason;
+        }
+    }
+
+    logAudit(action, "revenue_entry", id, desc);
+    res.json({ data: mapToSnakeCase(current) });
+});
+
+app.delete("/api/assets/revenue-entries/:id", (req, res) => {
+    const { id } = req.params;
+    const entry = revenueEntries.find((e) => e.id === id);
+    if (!entry) return res.status(404).json({ message: "Not found" });
+    if (entry.status === "locked") {
+        return res.status(400).json({ message: "Cannot delete a locked transaction" });
+    }
+    revenueEntries = revenueEntries.filter((e) => e.id !== id);
+    logAudit("delete", "revenue_entry", id, `Xóa giao dịch doanh thu: ${entry.note}`);
+    res.json({ data: undefined });
+});
+
+// =============================================================
+// Rate Cards
+// =============================================================
+app.get("/api/assets/rate-cards", (req, res) => {
+    res.json({ data: mapToSnakeCase(rateCards) });
+});
+
+app.post("/api/assets/rate-cards", (req, res) => {
+    const payload = req.body;
+    const newCard: RateCard = {
+        id: getNextId("RATE", rateCards),
+        provider: payload.provider || "",
+        model: payload.model || "",
+        inputPricePer1k: Number(payload.input_price_per_1k ?? 0),
+        outputPricePer1k: Number(payload.output_price_per_1k ?? 0),
+        currency: payload.currency || "USD",
+        updatedAt: new Date().toISOString().slice(0, 10),
+    };
+    rateCards = [...rateCards, newCard];
+    logAudit("create", "rate_card", newCard.id, `Tạo bảng giá Rate Card: ${newCard.provider} - ${newCard.model}`);
+    res.status(201).json({ data: mapToSnakeCase(newCard) });
+});
+
+app.patch("/api/assets/rate-cards/:id", (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+    const index = rateCards.findIndex((r) => r.id === id);
+    if (index === -1) return res.status(404).json({ message: "Not found" });
+
+    const current = rateCards[index];
+    if (payload.provider !== undefined) current.provider = payload.provider;
+    if (payload.model !== undefined) current.model = payload.model;
+    if (payload.input_price_per_1k !== undefined) current.inputPricePer1k = Number(payload.input_price_per_1k);
+    if (payload.output_price_per_1k !== undefined) current.outputPricePer1k = Number(payload.output_price_per_1k);
+    if (payload.currency !== undefined) current.currency = payload.currency;
+    current.updatedAt = new Date().toISOString().slice(0, 10);
+
+    rateCards[index] = current;
+    logAudit("update", "rate_card", id, `Cập nhật bảng giá Rate Card: ${current.provider} - ${current.model}`);
+    res.json({ data: mapToSnakeCase(current) });
+});
+
+app.delete("/api/assets/rate-cards/:id", (req, res) => {
+    const { id } = req.params;
+    const card = rateCards.find((r) => r.id === id);
+    if (!card) return res.status(404).json({ message: "Not found" });
+
+    rateCards = rateCards.filter((r) => r.id !== id);
+    logAudit("delete", "rate_card", id, `Xóa bảng giá Rate Card: ${card.provider} - ${card.model}`);
+    res.json({ data: undefined });
+});
+
+// =============================================================
+// Token Usage Logs
+// =============================================================
+app.get("/api/assets/token-usage-logs", (req, res) => {
+    const { publishedItemId, dateFrom, dateTo } = req.query;
+    let result = [...tokenUsageLogs];
+
+    if (publishedItemId) result = result.filter((t) => t.publishedItemId === publishedItemId);
+    if (dateFrom) result = result.filter((t) => t.date >= String(dateFrom));
+    if (dateTo) result = result.filter((t) => t.date <= String(dateTo));
+
+    res.json({ data: mapToSnakeCase(result) });
+});
+
+app.post("/api/assets/token-usage-logs", (req, res) => {
+    const payload = req.body;
+    const newLog: TokenUsageLog = {
+        id: getNextId("TU", tokenUsageLogs),
+        agent: payload.agent || "",
+        model: payload.model || "",
+        provider: payload.provider || "",
+        inputTokens: Number(payload.input_tokens ?? 0),
+        outputTokens: Number(payload.output_tokens ?? 0),
+        editorialItemId: payload.editorial_item_id,
+        publishedItemId: payload.published_item_id,
+        date: payload.date || new Date().toISOString().slice(0, 10),
+    };
+    tokenUsageLogs = [...tokenUsageLogs, newLog];
+    res.status(201).json({ data: mapToSnakeCase(newLog) });
+});
+
+// =============================================================
+// Audit Logs
+// =============================================================
+app.get("/api/assets/audit-logs", (req, res) => {
+    res.json({ data: mapToSnakeCase(auditLogs) });
+});
+
+app.post("/api/assets/audit-logs", (req, res) => {
+    const payload = req.body;
+    const newLog: AuditLogEntry = {
+        id: getNextId("AL", auditLogs),
+        action: payload.action || "custom",
+        entityType: payload.entity_type || "other",
+        entityId: payload.entity_id || "",
+        description: payload.description || "",
+        userId: "USR-001",
+        userName: "Admin User",
+        timestamp: new Date().toISOString(),
+    };
+    auditLogs = [newLog, ...auditLogs];
+    res.status(201).json({ data: mapToSnakeCase(newLog) });
+});
+
+// =============================================================
+// Analytics & KPI Helpers
+// =============================================================
+const computeBreakdown = (filters: any) => {
+    let logs = [...tokenUsageLogs];
+
+    if (filters.publishedItemId) {
+        logs = logs.filter((t) => t.publishedItemId === filters.publishedItemId);
+    }
+    if (filters.dateFrom) {
+        logs = logs.filter((t) => t.date >= filters.dateFrom);
+    }
+    if (filters.dateTo) {
+        logs = logs.filter((t) => t.date <= filters.dateTo);
+    }
+
+    const agentMap = new Map<string, any>();
+
+    for (const t of logs) {
+        const rate = rateCards.find((r) => r.model === t.model && r.provider === t.provider);
+        const inputCost = rate ? (t.inputTokens / 1000) * rate.inputPricePer1k : 0;
+        const outputCost = rate ? (t.outputTokens / 1000) * rate.outputPricePer1k : 0;
+        const key = `${t.agent}-${t.model}`;
+
+        const existing = agentMap.get(key);
+        if (existing) {
+            existing.inputTokens += t.inputTokens;
+            existing.outputTokens += t.outputTokens;
+            existing.inputCost += inputCost;
+            existing.outputCost += outputCost;
+            existing.totalCost += inputCost + outputCost;
+        } else {
+            agentMap.set(key, {
+                agent: t.agent,
+                model: t.model,
+                inputTokens: t.inputTokens,
+                outputTokens: t.outputTokens,
+                inputCost,
+                outputCost,
+                totalCost: inputCost + outputCost,
+            });
+        }
+    }
+
+    return Array.from(agentMap.values());
+};
+
+// =============================================================
+// Analytics & KPI Routes
+// =============================================================
+app.get("/api/assets/analytics/ai-cost-breakdown", (req, res) => {
+    const breakdown = computeBreakdown(req.query);
+    res.json({ data: breakdown });
+});
+
+app.get("/api/assets/analytics/total-ai-cost", (req, res) => {
+    const breakdown = computeBreakdown(req.query);
+    const total = breakdown.reduce((acc, curr) => acc + curr.totalCost, 0);
+    res.json({ data: total });
+});
+
+app.get("/api/assets/analytics/kpi", (req, res) => {
+    const filters = req.query;
+
+    let filteredCosts = costEntries.filter((c) => c.status !== "void");
+    let filteredRevs = revenueEntries.filter((r) => r.status !== "void");
+
+    if (filters.publishedItemId) {
+        filteredCosts = filteredCosts.filter((c) => c.publishedItemId === filters.publishedItemId);
+        filteredRevs = filteredRevs.filter((r) => r.publishedItemId === filters.publishedItemId);
+    }
+    if (filters.projectId) {
+        // Standard rule matching frontend filter logic:
+        filteredCosts = filteredCosts.filter((c) => c.projectId === filters.projectId || c.publishedItemId);
+        filteredRevs = filteredRevs.filter((r) => r.publishedItemId === filters.publishedItemId);
+    }
+    if (filters.dateFrom) {
+        filteredCosts = filteredCosts.filter((c) => c.date >= String(filters.dateFrom));
+        filteredRevs = filteredRevs.filter((r) => r.date >= String(filters.dateFrom));
+    }
+    if (filters.dateTo) {
+        filteredCosts = filteredCosts.filter((c) => c.date <= String(filters.dateTo));
+        filteredRevs = filteredRevs.filter((r) => r.date <= String(filters.dateTo));
+    }
+
+    const breakdown = computeBreakdown(filters);
+    const totalAiCostUsd = breakdown.reduce((acc, curr) => acc + curr.totalCost, 0);
+    const aiCostVnd = totalAiCostUsd * 25000;
+
+    const totalTransactionCost = filteredCosts.reduce((sum, entry) => sum + entry.amount, 0);
+    const totalCost = totalTransactionCost + aiCostVnd;
+
+    const totalRevenue = filteredRevs.reduce((sum, entry) => sum + entry.amount, 0);
+
+    const profit = totalRevenue - totalCost;
+    const roi = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+
+    const articleCount = new Set([
+        ...filteredCosts.map((c) => c.publishedItemId),
+        ...filteredRevs.map((r) => r.publishedItemId)
+    ].filter(Boolean)).size || 1;
+
+    const costPerArticle = totalCost / articleCount;
+
+    res.json({
+        data: {
+            totalCost,
+            totalRevenue,
+            profit,
+            roi,
+            costPerArticle,
+            costPer1kViews: 0,
+            aiCost: aiCostVnd,
+        },
+    });
+});
+// In-memory data store
+let store = {
+        step2: new Map(), // topic_id → synthesis_ready payload
+    step3: new Map(), // topic_id → angles_ready payload
+    step4: new Map(), // topic_id → outline_ready payload
+    settings: {
+        apiIntegrations: [...initialApiIntegrations],
+        aiProviders: [...initialAiProviders],
+        aiTaskConfigs: [...initialAiTaskConfigs],
+        webhooks: [...initialWebhooks],
+        generalSettings: { ...initialGeneralSettings },
+        tokenLimitsPerRole: [...tokenLimitsPerRole],
+        aiParams: { ...initialAiParams },
+    },
+    projectConfig: {
+        setupChecklist: [...initialSetupChecklist],
+        modelMappings: {
+            editorial: [...initialEditorial],
+            seo: [...initialSeo],
+        },
+        promptTemplates: [...initialPromptTemplates],
+        approvalRules: [...initialApprovalRules],
+        mediaPolicy: { ...initialMediaPolicy },
+        workflowSteps: [...initialWorkflowSteps],
+        socialChannels: [...initialSocialChannels],
+        channelTemplates: [...initialChannelTemplates],
+        channelPublishRules: [...initialChannelPublishRules],
+        taxonomy: [...initialTaxonomy],
+        notificationRules: [...initialNotificationRules],
+        auditLogs: [...initialAuditLogs],
+        knowledgeSources: [...initialKnowledgeSources],
+        quotaConfig: { ...initialQuotaConfig },
+        assetFinanceConfig: { ...initialAssetFinanceConfig },
+    }
+};
+
+// ==========================================
+// Settings Routes
+// ==========================================
+app.get('/api/settings/general', (req, res) => res.json(store.settings.generalSettings));
+app.put('/api/settings/general', (req, res) => {
+    store.settings.generalSettings = { ...store.settings.generalSettings, ...req.body };
+    res.json(store.settings.generalSettings);
+});
+
+// Generic collection handler factory
+const createCollectionRoutes = (basePath: string, getCollection: () => any[]) => {
+    app.get(basePath, (req, res) => res.json(getCollection()));
+    app.post(basePath, (req, res) => {
+        const newItem = { ...req.body, id: Date.now().toString() };
+        getCollection().push(newItem);
+        res.json(newItem);
+    });
+    app.put(`${basePath}/:id`, (req, res) => {
+        const collection = getCollection();
+        const index = collection.findIndex((item: any) => item.id === req.params.id);
+        if (index > -1) {
+            collection[index] = { ...collection[index], ...req.body };
+            res.json(collection[index]);
+        } else {
+            res.status(404).json({ error: 'Not found' });
+        }
+    });
+
+    // Optional PUT on collection for full array update (e.g., workflow steps order)
+    app.put(basePath, (req, res) => {
+        if (Array.isArray(req.body)) {
+            const collection = getCollection();
+            collection.splice(0, collection.length, ...req.body);
+            res.json(collection);
+        } else {
+            res.status(400).json({ error: 'Array expected' });
+        }
+    });
+    app.delete(`${basePath}/:id`, (req, res) => {
+        const collection = getCollection();
+        const index = collection.findIndex((item: any) => item.id === req.params.id);
+        if (index > -1) {
+            collection.splice(index, 1);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'Not found' });
+        }
+    });
+};
+
+createCollectionRoutes('/api/settings/api-integrations', () => store.settings.apiIntegrations);
+createCollectionRoutes('/api/settings/ai-providers', () => store.settings.aiProviders);
+createCollectionRoutes('/api/settings/ai-task-configs', () => store.settings.aiTaskConfigs);
+createCollectionRoutes('/api/settings/webhooks', () => store.settings.webhooks);
+
+// ==========================================
+// Project Config Routes
+// ==========================================
+app.get('/api/project-config/media-policy', (req, res) => res.json(store.projectConfig.mediaPolicy));
+app.put('/api/project-config/media-policy', (req, res) => {
+    store.projectConfig.mediaPolicy = { ...store.projectConfig.mediaPolicy, ...req.body };
+    res.json(store.projectConfig.mediaPolicy);
+});
+
+app.get('/api/project-config/quota-config', (req, res) => res.json(store.projectConfig.quotaConfig));
+app.put('/api/project-config/quota-config', (req, res) => {
+    store.projectConfig.quotaConfig = { ...store.projectConfig.quotaConfig, ...req.body };
+    res.json(store.projectConfig.quotaConfig);
+});
+app.put('/api/settings/ai-task-configs/:task', (req, res) => {
+    const index = store.settings.aiTaskConfigs.findIndex(
+        item => item.task === req.params.task
+    );
+
+    if (index === -1) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+
+    store.settings.aiTaskConfigs[index] = {
+        ...store.settings.aiTaskConfigs[index],
+        ...req.body,
+    };
+
+    res.json(store.settings.aiTaskConfigs[index]);
+});
+app.get('/api/settings/ai-params', (req, res) => res.json(store.settings.aiParams));
+app.put('/api/settings/ai-params', (req, res) => {
+    store.settings.aiParams = { ...store.settings.aiParams, ...req.body };
+    res.json(store.settings.aiParams);
+});
+app.get('/api/project-config/asset-finance', (req, res) => res.json(store.projectConfig.assetFinanceConfig));
+app.put('/api/project-config/asset-finance', (req, res) => {
+    store.projectConfig.assetFinanceConfig = { ...store.projectConfig.assetFinanceConfig, ...req.body };
+    res.json(store.projectConfig.assetFinanceConfig);
+});
+
+// Single object / display routes
+app.get('/api/project-config/audit-logs', (req, res) => res.json(store.projectConfig.auditLogs));
+app.get('/api/project-config/setup-checklist', (req, res) => res.json(store.projectConfig.setupChecklist));
+
+app.get('/api/project-config/model-mappings', (req, res) => {
+    const type = req.query.type as string;
+    if (type === 'editorial') return res.json(store.projectConfig.modelMappings.editorial);
+    if (type === 'seo') return res.json(store.projectConfig.modelMappings.seo);
+    res.status(400).json({ error: 'invalid type' });
+});
+let modelMappings: any[] = [];
+
+app.put(
+    "/api/project-config/model-mappings",
+    (req: Request<{}, {}, any[]>, res: Response) => {
+        try {
+            const mappings = req.body;
+
+            if (!Array.isArray(mappings)) {
+                return res.status(400).json({
+                    message: "Body must be an array of ModelMapping",
+                });
+            }
+
+            modelMappings = mappings;
+
+            return res.status(200).json(modelMappings);
+        } catch (error) {
+            console.error(error);
+
+            return res.status(500).json({
+                message: "Failed to update model mappings",
+            });
+        }
+    }
+);
+
+createCollectionRoutes('/api/project-config/workflow-steps', () => store.projectConfig.workflowSteps);
+createCollectionRoutes('/api/project-config/prompt-templates', () => store.projectConfig.promptTemplates);
+createCollectionRoutes('/api/project-config/approval-rules', () => store.projectConfig.approvalRules);
+// createCollectionRoutes('/api/project-config/social-channels', () => store.projectConfig.socialChannels);
+createCollectionRoutes('/api/project-config/channel-templates', () => store.projectConfig.channelTemplates);
+createCollectionRoutes('/api/project-config/channel-publish-rules', () => store.projectConfig.channelPublishRules);
+createCollectionRoutes('/api/project-config/taxonomy', () => store.projectConfig.taxonomy);
+createCollectionRoutes('/api/project-config/notification-rules', () => store.projectConfig.notificationRules);
+createCollectionRoutes('/api/project-config/knowledge-sources', () => store.projectConfig.knowledgeSources);
+// server.ts — thêm vào nếu chưa có
+app.get('/api/settings/token-limits', (req, res) => res.json(store.settings.tokenLimitsPerRole));
+app.put('/api/settings/token-limits', (req, res) => {
+    if (Array.isArray(req.body)) {
+        store.settings.tokenLimitsPerRole = req.body;
+        res.json(store.settings.tokenLimitsPerRole);
+    } else {
+        res.status(400).json({ error: 'Array expected' });
+    }
+});
+app.get('/api/project-config/social-channels', (req, res) => {
+    res.json({
+        success: true,
+        data: store.projectConfig.socialChannels,
+    });
+});
+app.put('/api/project-config/social-channels/:id', (req, res) => {
+    const { id } = req.params;
+    const channels = store.projectConfig.socialChannels;
+
+    const channel = channels.find(
+        (item: any) => String(item.id) === String(id)
+    );
+
+    if (!channel) {
+        return res.status(404).json({
+            error: 'Social channel not found',
+        });
+    }
+
+    Object.assign(channel, req.body);
+
+    return res.json({
+        success: true,
+        data: channel,
+    });
+});
+// =============================================================
+// Start Server
+// =============================================================
 
 // ─────────────────────────────────────────────
 // START
