@@ -2211,7 +2211,9 @@ app.patch('/api/setup-checklist/:id', (req, res) => {
     res.json({ data: setupChecklist[idx] });
 });
 
-// ── 2. AI PROVIDER + MODEL MAPPING ───────────────────────────────────
+// ── 2. AI PROVIDER + MODEL MAPPING 
+// SEO Model Mapping
+// ───────────────────────────────────
 app.get('/api/setup-checklist/editorial-mappings', (req, res) => {
     res.json({ data: editorialModelMapping });
 });
@@ -2233,7 +2235,7 @@ app.post('/api/setup-checklist/seo-mappings', (req, res) => {
     addAuditLog('Admin', 'UPDATE', 'SEO Model Mapping', `${oldLen} agents mapped`, `${seoModelMapping.length} agents mapped`);
     res.json({ data: seoModelMapping });
 });
-
+//─────────Prompt Templates
 app.get('/api/setup-checklist/prompt-templates', (req, res) => {
     res.json({ data: promptTemplates });
 });
@@ -2402,7 +2404,7 @@ app.delete('/api/setup-checklist/taxonomy/:id', (req, res) => {
     res.json({ data: { success: true } });
 });
 
-// ── 6. MEDIA POLICY ──────────────────────────────────────────────────
+// ── 6. MEDIA CONFIGURATION ──────────────────────────────────────────────────
 app.get('/api/setup-checklist/media-policy', (req, res) => {
     res.json({ data: mediaPolicy });
 });
@@ -2457,7 +2459,7 @@ app.delete('/api/setup-checklist/notification-rules/:id', (req, res) => {
     res.json({ data: { success: true } });
 });
 
-// ── 9. QUOTA CONFIG ──────────────────────────────────────────────────
+// ── 9. QUOTA & COST CONTROL ──────────────────────────────────────────────────
 app.get('/api/setup-checklist/quota-config', (req, res) => {
     res.json({ data: quotaConfig });
 });
@@ -2469,7 +2471,7 @@ app.post('/api/setup-checklist/quota-config', (req, res) => {
     res.json({ data: quotaConfig });
 });
 
-// ── 10. ASSET FINANCE CONFIG ─────────────────────────────────────────
+// ── 10. ASSET / FINANCE ─────────────────────────────────────────
 app.get('/api/setup-checklist/finance-config', (req, res) => {
     res.json({ data: assetFinanceConfig });
 });
@@ -3355,6 +3357,7 @@ let store = {
 // ==========================================
 // Settings Routes
 // ==========================================
+//GENERAL
 app.get('/api/settings/general', (req, res) => res.json(store.settings.generalSettings));
 app.put('/api/settings/general', (req, res) => {
     store.settings.generalSettings = { ...store.settings.generalSettings, ...req.body };
@@ -3403,8 +3406,11 @@ const createCollectionRoutes = (basePath: string, getCollection: () => any[]) =>
 };
 
 createCollectionRoutes('/api/settings/api-integrations', () => store.settings.apiIntegrations);
+// AI PROVIDERS
 createCollectionRoutes('/api/settings/ai-providers', () => store.settings.aiProviders);
+// AI CONFIG
 createCollectionRoutes('/api/settings/ai-task-configs', () => store.settings.aiTaskConfigs);
+// wEBHOOKS
 createCollectionRoutes('/api/settings/webhooks', () => store.settings.webhooks);
 
 // ==========================================
@@ -3437,6 +3443,7 @@ app.put('/api/settings/ai-task-configs/:task', (req, res) => {
 
     res.json(store.settings.aiTaskConfigs[index]);
 });
+// CHI PHÍ + Tham số mặc định + NGÂN SÁCH + Ngưỡng cảnh báo + Temperature + Max Tokens
 app.get('/api/settings/ai-params', (req, res) => res.json(store.settings.aiParams));
 app.put('/api/settings/ai-params', (req, res) => {
     store.settings.aiParams = { ...store.settings.aiParams, ...req.body };
@@ -3448,10 +3455,26 @@ app.put('/api/project-config/asset-finance', (req, res) => {
     res.json(store.projectConfig.assetFinanceConfig);
 });
 
-// Single object / display routes
+//Audit logs
 app.get('/api/project-config/audit-logs', (req, res) => res.json(store.projectConfig.auditLogs));
+app.post('/api/project-config/audit-logs', (req, res) => {
+    const newAuditLog: any = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        ...req.body,
+    };
+
+    store.projectConfig.auditLogs.unshift(newAuditLog);
+
+    res.json({
+        success: true,
+        data: newAuditLog,
+    });
+});
+// Single object / display routes
 app.get('/api/project-config/setup-checklist', (req, res) => res.json(store.projectConfig.setupChecklist));
 
+//SEO MODEL MAPPING + EDITORIAL MODEL MAPPING
 app.get('/api/project-config/model-mappings', (req, res) => {
     const type = req.query.type as string;
     if (type === 'editorial') return res.json(store.projectConfig.modelMappings.editorial);
@@ -3484,17 +3507,25 @@ app.put(
         }
     }
 );
-
+//EDITORIAL WORKFLOW
 createCollectionRoutes('/api/project-config/workflow-steps', () => store.projectConfig.workflowSteps);
+//PROMPT TEMPLATES
 createCollectionRoutes('/api/project-config/prompt-templates', () => store.projectConfig.promptTemplates);
+//APPROVAL RULES
 createCollectionRoutes('/api/project-config/approval-rules', () => store.projectConfig.approvalRules);
-// createCollectionRoutes('/api/project-config/social-channels', () => store.projectConfig.socialChannels);
+//CHANNEL TEMPLATES
 createCollectionRoutes('/api/project-config/channel-templates', () => store.projectConfig.channelTemplates);
+//PUBLISHING RULES
 createCollectionRoutes('/api/project-config/channel-publish-rules', () => store.projectConfig.channelPublishRules);
+//TAXONOMY & MAPPING
 createCollectionRoutes('/api/project-config/taxonomy', () => store.projectConfig.taxonomy);
+//NOTIFICATION RULES
 createCollectionRoutes('/api/project-config/notification-rules', () => store.projectConfig.notificationRules);
+
+//KNOWLEDGE BASE
 createCollectionRoutes('/api/project-config/knowledge-sources', () => store.projectConfig.knowledgeSources);
 // server.ts — thêm vào nếu chưa có
+//TOKEN LIMITS THEO ROLE
 app.get('/api/settings/token-limits', (req, res) => res.json(store.settings.tokenLimitsPerRole));
 app.put('/api/settings/token-limits', (req, res) => {
     if (Array.isArray(req.body)) {
@@ -3504,6 +3535,7 @@ app.put('/api/settings/token-limits', (req, res) => {
         res.status(400).json({ error: 'Array expected' });
     }
 });
+//SOCIAL CHANNELS
 app.get('/api/project-config/social-channels', (req, res) => {
     res.json({
         success: true,
@@ -3538,20 +3570,6 @@ app.put('/api/project-config/social-channels/:id', (req, res) => {
 // ─────────────────────────────────────────────
 // START
 // ─────────────────────────────────────────────
-app.post('/api/project-config/audit-logs', (req, res) => {
-    const newAuditLog: any = {
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-        ...req.body,
-    };
-
-    store.projectConfig.auditLogs.unshift(newAuditLog);
-
-    res.json({
-        success: true,
-        data: newAuditLog,
-    });
-});
 const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => console.log(`Editorial pipeline server running on :${PORT}`));
 
