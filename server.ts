@@ -3538,7 +3538,20 @@ app.put('/api/project-config/social-channels/:id', (req, res) => {
 // ─────────────────────────────────────────────
 // START
 // ─────────────────────────────────────────────
+app.post('/api/project-config/audit-logs', (req, res) => {
+    const newAuditLog: any = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        ...req.body,
+    };
 
+    store.projectConfig.auditLogs.unshift(newAuditLog);
+
+    res.json({
+        success: true,
+        data: newAuditLog,
+    });
+});
 const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => console.log(`Editorial pipeline server running on :${PORT}`));
 
