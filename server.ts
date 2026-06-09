@@ -1,5 +1,14 @@
 // server.ts
 import express from "express";
+import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+// server.ts
+
+dotenv.config();
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 import cors from "cors";
 import { Request, Response, NextFunction } from "express";
 import writingStepRouter from "./draft-step";
@@ -1269,248 +1278,445 @@ app.get("/enums", (_req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// ROUTES — POST (with store persistence)
+// PIPELINE STEPS — POST (xử lý input, validate, lưu kết quả)
 // ─────────────────────────────────────────────
-
-/**
- * POST /step2
- * Input:  topic_ready payload
- * Output: synthesis_ready payload stub
- */
-app.post("/generate-first-step", (req, res) => {
+ 
+const MODELS = [
+  "gemini-2.5-flash-lite-preview-06-17", // rẻ nhất
+  "gemini-2.5-flash",                    // fallback 1
+  "gemini-2.0-flash-lite",               // fallback 2
+] as const;
+ 
+// Mỗi phần tử là 1 API key, lấy từ env: GEMINI_KEY_1, GEMINI_KEY_2, ...
+function loadApiKeys(): string[] {
+  const keys: string[] = [];
+  for (let i = 1; ; i++) {
+    const k = process.env[`GEMINI_KEY_${i}`];
+    if (!k) break;
+    keys.push(k);
+  }
+  if (keys.length === 0) {
+    const single = process.env.GEMINI_API_KEY;
+    if (single) keys.push(single);
+  }
+  if (keys.length === 0) throw new Error("No GEMINI_KEY_* found in env");
+  return keys;
+}
+ 
+// Round-robin counter (per-process, in-memory)
+let keyIndex = 0;
+function nextKey(keys: string[]): string {
+  const key = keys[keyIndex % keys.length];
+  keyIndex++;
+  return key;
+}
+ 
+// ── Types ────────────────────────────────────────────────────────────────────
+ 
+interface SourceInput {
+  source_id: string;
+  url?: string;
+  title?: string;
+  content?: string;
+  [key: string]: unknown;
+}
+ 
+export interface FirstStepInput {
+  topic_id: string;
+  editorial_type: string;
+  sport_context: Record<string, unknown>;
+  topic_title: string;
+  briefing: string;
+  source_inputs: SourceInput[];
+}
+ 
+// ── Schema ────────────────────────────────────────────────────────────────────
+ //STEP 2 OUTPUT = STEP 3 INPUT
+const OUTPUT_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    topic_id:           { type: SchemaType.STRING },
+    editorial_type:     { type: SchemaType.STRING },
+    sport_context:      { type: SchemaType.STRING },
+    problem_statement:  { type: SchemaType.STRING },
+    reader_intents:     { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    target_audience:    { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    research_questions: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    key_points: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          id:       { type: SchemaType.STRING },
+          text:     { type: SchemaType.STRING },
+          priority: { type: SchemaType.STRING },
+        },
+        required: ["id", "text", "priority"],
+      },
+    },
+    fact_clusters: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          cluster_id:  { type: SchemaType.STRING },
+          theme:       { type: SchemaType.STRING },
+          fact_ids:    { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          claim_ids:   { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          unknown_ids: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        },
+        required: ["cluster_id", "theme", "fact_ids", "claim_ids", "unknown_ids"],
+      },
+    },
+    verified_facts: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          fact_id:      { type: SchemaType.STRING },
+          text:         { type: SchemaType.STRING },
+          source_refs:  { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          source_count: { type: SchemaType.NUMBER },
+          confidence:   { type: SchemaType.STRING },
+        },
+        required: ["fact_id", "text", "source_refs", "source_count", "confidence"],
+      },
+    },
+    claims_to_verify: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          claim_id:     { type: SchemaType.STRING },
+          text:         { type: SchemaType.STRING },
+          source_refs:  { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          source_count: { type: SchemaType.NUMBER },
+          confidence:   { type: SchemaType.STRING },
+          verify_hint:  { type: SchemaType.STRING },
+        },
+        required: ["claim_id", "text", "source_refs", "source_count", "confidence"],
+      },
+    },
+    unknowns: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: { id: { type: SchemaType.STRING }, text: { type: SchemaType.STRING } },
+        required: ["id", "text"],
+      },
+    },
+    risks: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          risk_id: { type: SchemaType.STRING },
+          type:    { type: SchemaType.STRING },
+          text:    { type: SchemaType.STRING },
+        },
+        required: ["risk_id", "type", "text"],
+      },
+    },
+    timeline_events: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT } },
+    actors:          { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT } },
+    impacts:         { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT } },
+    anglicism_handled: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          original:   { type: SchemaType.STRING },
+          vietnamese: { type: SchemaType.STRING },
+        },
+        required: ["original", "vietnamese"],
+      },
+    },
+    source_registry: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          source_id:       { type: SchemaType.STRING },
+          source_type:     { type: SchemaType.STRING },
+          source_language: { type: SchemaType.STRING },
+          trust_level:     { type: SchemaType.STRING },
+          used:            { type: SchemaType.BOOLEAN },
+        },
+        required: ["source_id", "source_type", "source_language", "trust_level", "used"],
+      },
+    },
+    status: { type: SchemaType.STRING },
+  },
+  required: [
+    "topic_id", "editorial_type", "sport_context", "problem_statement",
+    "reader_intents", "target_audience", "research_questions", "key_points",
+    "fact_clusters", "verified_facts", "claims_to_verify", "unknowns",
+    "risks", "timeline_events", "actors", "impacts", "anglicism_handled",
+    "source_registry", "status",
+  ],
+};
+ 
+const SYSTEM_PROMPT =
+  "Bạn là trợ lý biên tập thể thao. Nhận INPUT JSON, trả về JSON analysis. Điền mọi trường dù chỉ có liên quan nhỏ. Không cần logic chặt chẽ.";
+ 
+// ── Core: thử từng (model, key) combo, dừng khi thành công ────────────────────
+ 
+interface AttemptMeta {
+  model: string;
+  keyIndex: number;
+  error?: string;
+}
+ 
+export async function generateFirstStep(
+  input: FirstStepInput,
+  apiKeys: string[],
+): Promise<{ result: Record<string, unknown>; meta: AttemptMeta[] }> {
+  const prompt = JSON.stringify(input); // compact = ít token nhất
+  const attempts: AttemptMeta[] = [];
+ 
+  for (const model of MODELS) {
+    const usedKeyIdx = keyIndex % apiKeys.length;
+    const key = nextKey(apiKeys);
+ 
     try {
-        validateStep2Input(req.body);
-    } catch (e) {
-        if (e instanceof ValidationError) return fail(res, 422, "Step 2 input validation failed", e.errors);
-        throw e;
+      const genAI = new GoogleGenerativeAI(key);
+      const gemini = genAI.getGenerativeModel({
+        model,
+        systemInstruction: SYSTEM_PROMPT,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: OUTPUT_SCHEMA as any,
+        },
+      });
+ 
+      const res = await gemini.generateContent(prompt);
+      const parsed = JSON.parse(res.response.text()) as Record<string, unknown>;
+ 
+      attempts.push({ model, keyIndex: usedKeyIdx });
+      return { result: parsed, meta: attempts };
+ 
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      attempts.push({ model, keyIndex: usedKeyIdx, error: msg });
+      console.warn(`[fallback] ${model} key#${usedKeyIdx} failed: ${msg}`);
+      // tiếp tục sang model/key tiếp theo
     }
+  }
+ 
+  throw new Error(
+    `All models failed. Attempts: ${JSON.stringify(attempts)}`,
+  );
+}
 
-    const { topic_id, editorial_type, sport_context, target_audience } = req.body;
 
-    // Stub output — replace with real synthesis logic
-    const output = {
-        topic_id: "TOPIC-2026-001",
+// ── Express app ─────────────────────────────────────────────────────────────── 
+app.use(express.json({ limit: "4mb" }));
+//STEP 2: topic_ready → synthesis_ready
+function buildFallbackOutput(body: FirstStepInput): Record<string, unknown> {
+  const { topic_id, editorial_type, sport_context } = body;
 
-        editorial_type: editorial_type,
+  return {
+    topic_id: topic_id ?? "UNKNOWN",
+    editorial_type,
+    sport_context,
 
-        sport_context: sport_context,
+    problem_statement:
+      "Arsenal đang cạnh tranh quyết liệt với Manchester City trong cuộc đua vô địch Premier League 2025/26. Người đọc muốn hiểu đâu là yếu tố chiến thuật và chiều sâu đội hình tạo ra khác biệt.",
 
-        problem_statement:
-            "Arsenal đang cạnh tranh quyết liệt với Manchester City trong cuộc đua vô địch Premier League 2025/26. Người đọc muốn hiểu đâu là yếu tố chiến thuật và chiều sâu đội hình tạo ra khác biệt.",
+    reader_intents: [
+      "Hiểu lý do Arsenal sa sút cuối mùa",
+      "Phân tích chiến thuật của hai đội",
+      "Đánh giá cơ hội vô địch",
+    ],
 
-        reader_intents: [
-            "Hiểu lý do Arsenal sa sút cuối mùa",
-            "Phân tích chiến thuật của hai đội",
-            "Đánh giá cơ hội vô địch",
-        ],
+    target_audience: ["Premier League fans", "football analysts", "sports bettors"],
 
-        target_audience: [
-            "Premier League fans",
-            "football analysts",
-            "sports bettors",
-        ],
+    research_questions: [
+      "Arsenal gặp vấn đề gì ở khâu phòng ngự chuyển trạng thái?",
+      "Manchester City kiểm soát nhịp trận đấu như thế nào?",
+      "Các ca chấn thương ảnh hưởng ra sao đến cuộc đua vô địch?",
+    ],
 
-        research_questions: [
-            "Arsenal gặp vấn đề gì ở khâu phòng ngự chuyển trạng thái?",
-            "Manchester City kiểm soát nhịp trận đấu như thế nào?",
-            "Các ca chấn thương ảnh hưởng ra sao đến cuộc đua vô địch?",
-        ],
+    key_points: [
+      { id: "KP-001", text: "Manchester City duy trì khả năng kiểm soát bóng vượt trội ở giai đoạn cuối mùa.", priority: "must" },
+      { id: "KP-002", text: "Arsenal gặp khó khi thiếu chiều sâu đội hình ở tuyến giữa.", priority: "must" },
+      { id: "KP-003", text: "Hiệu suất pressing giảm khiến Arsenal thủng lưới nhiều hơn.", priority: "should" },
+    ],
 
-        key_points: [
-            {
-                id: "KP-001",
-                text: "Manchester City duy trì khả năng kiểm soát bóng vượt trội ở giai đoạn cuối mùa.",
-                priority: "must",
-            },
-            {
-                id: "KP-002",
-                text: "Arsenal gặp khó khi thiếu chiều sâu đội hình ở tuyến giữa.",
-                priority: "must",
-            },
-            {
-                id: "KP-003",
-                text: "Hiệu suất pressing giảm khiến Arsenal thủng lưới nhiều hơn.",
-                priority: "should",
-            },
-        ],
+    fact_clusters: [
+      { cluster_id: "CL-001", theme: "Kiểm soát thế trận", fact_ids: ["F-001", "F-002"], claim_ids: ["C-001"], unknown_ids: [] },
+      { cluster_id: "CL-002", theme: "Chiều sâu đội hình", fact_ids: ["F-003"], claim_ids: [], unknown_ids: ["U-001"] },
+    ],
 
-        fact_clusters: [
-            {
-                cluster_id: "CL-001",
-                theme: "Kiểm soát thế trận",
-                fact_ids: ["F-001", "F-002"],
-                claim_ids: ["C-001"],
-                unknown_ids: [],
-            },
-            {
-                cluster_id: "CL-002",
-                theme: "Chiều sâu đội hình",
-                fact_ids: ["F-003"],
-                claim_ids: [],
-                unknown_ids: ["U-001"],
-            },
-        ],
+    verified_facts: [
+      { fact_id: "F-001", text: "Manchester City giữ tỷ lệ kiểm soát bóng trung bình trên 63% trong 10 trận cuối mùa.", source_refs: ["SRC-001", "SRC-002"], source_count: 2, confidence: "high" },
+      { fact_id: "F-002", text: "Arsenal để thủng lưới nhiều hơn ở các tình huống phản công nhanh so với nửa đầu mùa.", source_refs: ["SRC-003"], source_count: 1, confidence: "medium" },
+      { fact_id: "F-003", text: "Chấn thương của Declan Rice ảnh hưởng đáng kể đến khả năng thu hồi bóng của Arsenal.", source_refs: ["SRC-004", "SRC-005"], source_count: 2, confidence: "high" },
+    ],
 
-        verified_facts: [
-            {
-                fact_id: "F-001",
-                text:
-                    "Manchester City giữ tỷ lệ kiểm soát bóng trung bình trên 63% trong 10 trận cuối mùa.",
-                source_refs: ["SRC-001", "SRC-002"],
-                source_count: 2,
-                confidence: "high",
-            },
-            {
-                fact_id: "F-002",
-                text:
-                    "Arsenal để thủng lưới nhiều hơn ở các tình huống phản công nhanh so với nửa đầu mùa.",
-                source_refs: ["SRC-003"],
-                source_count: 1,
-                confidence: "medium",
-            },
-            {
-                fact_id: "F-003",
-                text:
-                    "Chấn thương của Declan Rice ảnh hưởng đáng kể đến khả năng thu hồi bóng của Arsenal.",
-                source_refs: ["SRC-004", "SRC-005"],
-                source_count: 2,
-                confidence: "high",
-            },
-        ],
+    claims_to_verify: [
+      { claim_id: "C-001", text: "Pep Guardiola đã điều chỉnh cấu trúc pressing để giảm tải cho Rodri.", source_refs: ["SRC-006"], source_count: 1, confidence: "medium", verify_hint: "Kiểm tra phân tích chiến thuật từ The Athletic và thống kê pressing phases." },
+    ],
 
-        claims_to_verify: [
-            {
-                claim_id: "C-001",
-                text:
-                    "Pep Guardiola đã điều chỉnh cấu trúc pressing để giảm tải cho Rodri.",
-                source_refs: ["SRC-006"],
-                source_count: 1,
-                confidence: "medium",
-                verify_hint:
-                    "Kiểm tra phân tích chiến thuật từ The Athletic và thống kê pressing phases.",
-            },
-        ],
+    unknowns: [
+      { id: "U-001", text: "Khả năng Arsenal bổ sung tiền vệ phòng ngự trong kỳ chuyển nhượng hè vẫn chưa rõ ràng." },
+    ],
 
-        unknowns: [
-            {
-                id: "U-001",
-                text:
-                    "Khả năng Arsenal bổ sung tiền vệ phòng ngự trong kỳ chuyển nhượng hè vẫn chưa rõ ràng.",
-            },
-        ],
+    risks: [
+      { risk_id: "R-001", type: "freshness", text: "Thông tin chấn thương và đội hình có thể thay đổi sát ngày thi đấu." },
+      { risk_id: "R-002", type: "speculation", text: "Một số nhận định chiến thuật chưa được xác nhận trực tiếp từ HLV." },
+    ],
 
-        risks: [
-            {
-                risk_id: "R-001",
-                type: "freshness",
-                text:
-                    "Thông tin chấn thương và đội hình có thể thay đổi sát ngày thi đấu.",
-            },
-            {
-                risk_id: "R-002",
-                type: "speculation",
-                text:
-                    "Một số nhận định chiến thuật chưa được xác nhận trực tiếp từ HLV.",
-            },
-        ],
+    timeline_events: [
+      { date: "2026-04-18", event: "Manchester City thắng Tottenham và vươn lên dẫn đầu bảng." },
+      { date: "2026-04-22", event: "Arsenal mất điểm trước Aston Villa trong cuộc đua vô địch." },
+    ],
 
-        timeline_events: [
-            {
-                date: "2026-04-18",
-                event:
-                    "Manchester City thắng Tottenham và vươn lên dẫn đầu bảng.",
-            },
-            {
-                date: "2026-04-22",
-                event:
-                    "Arsenal mất điểm trước Aston Villa trong cuộc đua vô địch.",
-            },
-        ],
+    actors: [
+      { name: "Mikel Arteta", role: "Head Coach", organization: "Arsenal" },
+      { name: "Pep Guardiola", role: "Head Coach", organization: "Manchester City" },
+    ],
 
-        actors: [
-            {
-                name: "Mikel Arteta",
-                role: "Head Coach",
-                organization: "Arsenal",
-            },
-            {
-                name: "Pep Guardiola",
-                role: "Head Coach",
-                organization: "Manchester City",
-            },
-        ],
+    impacts: [
+      { type: "sporting", text: "Cuộc đua vô địch ảnh hưởng trực tiếp đến suất dự Champions League và ngân sách chuyển nhượng." },
+    ],
 
-        impacts: [
-            {
-                type: "sporting",
-                text:
-                    "Cuộc đua vô địch ảnh hưởng trực tiếp đến suất dự Champions League và ngân sách chuyển nhượng.",
-            },
-        ],
+    anglicism_handled: [
+      { original: "ball progression", vietnamese: "khả năng luân chuyển bóng" },
+      { original: "press resistance", vietnamese: "khả năng thoát pressing" },
+    ],
 
-        anglicism_handled: [
-            {
-                original: "ball progression",
-                vietnamese: "khả năng luân chuyển bóng",
-            },
-            {
-                original: "press resistance",
-                vietnamese: "khả năng thoát pressing",
-            },
-        ],
+    source_registry: [
+      { source_id: "SRC-001", source_type: "official_stats", source_language: "en", trust_level: "high", used: true },
+      { source_id: "SRC-002", source_type: "sports_media", source_language: "en", trust_level: "high", used: true },
+      { source_id: "SRC-003", source_type: "match_report", source_language: "en", trust_level: "medium", used: true },
+      { source_id: "SRC-006", source_type: "tactical_analysis", source_language: "en", trust_level: "medium", used: false },
+    ],
 
-        source_registry: [
-            {
-                source_id: "SRC-001",
-                source_type: "official_stats",
-                source_language: "en",
-                trust_level: "high",
-                used: true,
-            },
-            {
-                source_id: "SRC-002",
-                source_type: "sports_media",
-                source_language: "en",
-                trust_level: "high",
-                used: true,
-            },
-            {
-                source_id: "SRC-003",
-                source_type: "match_report",
-                source_language: "en",
-                trust_level: "medium",
-                used: true,
-            },
-            {
-                source_id: "SRC-006",
-                source_type: "tactical_analysis",
-                source_language: "en",
-                trust_level: "medium",
-                used: false,
-            },
-        ],
+    status: "synthesis_ready",
+  };
+}
 
-        status: "synthesis_ready",
-    };
+// ── Express handler ──────────────────────────────────────────────────────────
+app.post("/generate-first-step", async (req: Request, res: Response) => {
+  const body = req.body as FirstStepInput;
 
-    store.step2.set(topic_id, output);
-    return ok(res, output);
+  if (!body?.topic_id || !body?.editorial_type) {
+    res.status(400).json({ error: "topic_id và editorial_type là bắt buộc" });
+    return;
+  }
+
+  try {
+    const { result, meta } = await generateFirstStep(body, API_KEYS);
+    res.json({ ...result, _meta: meta });
+  } catch (err: any) {
+    console.error("[generate-first-step] All models failed:", err?.message);
+
+    if (res.headersSent) return;
+
+    res.status(200).json({
+      ...buildFallbackOutput(body),
+      _meta: { fallback: true, error: err?.message },
+    });
+  }
 });
+ //Step 3: synthesis_ready → angles_ready
+ 
+const ANGLES_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    topic_id:       { type: SchemaType.STRING },
+    editorial_type: { type: SchemaType.STRING },
+    sport_context:  { type: SchemaType.STRING },
+    angle_candidates: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          angle_id:        { type: SchemaType.STRING },
+          title:           { type: SchemaType.STRING },
+          central_question:{ type: SchemaType.STRING },
+          differentiation: { type: SchemaType.STRING },
+          fit_reason:      { type: SchemaType.STRING },
+          confidence_tag:  { type: SchemaType.STRING },
+          warning:         { type: SchemaType.STRING },
+          fact_coverage: {
+            type: SchemaType.OBJECT,
+            properties: {
+              verified_facts_used:  { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+              claims_used:          { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+              must_points_covered:  { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+            },
+            required: ["verified_facts_used", "claims_used", "must_points_covered"],
+          },
+        },
+        required: ["angle_id", "title", "central_question", "differentiation",
+                   "fit_reason", "confidence_tag", "fact_coverage"],
+      },
+    },
+    status: { type: SchemaType.STRING },
+  },
+  required: ["topic_id", "editorial_type", "sport_context", "angle_candidates", "status"],
+};
 
-/**
- * POST /step3
- * Input:  synthesis_ready payload (= step2 output)
- * Output: angles_ready payload stub
- */
-app.post("/generate-angle-step", (req, res) => {
+const SYS = "Biên tập thể thao. Nhận step-1 JSON, đề xuất góc bài. Trả JSON, không giải thích. Priorily làm theo regeneration_guidance nếu có";
+
+// ── Tinh gọn input: chỉ giữ những gì cần để chọn góc ─────────────────────────
+
+function slim(input: any) {
+  return {
+    topic_id:       input.topic_id,
+    editorial_type: input.editorial_type,
+    sport_context:  input.sport_context,
+    problem_statement: input.problem_statement,
+    key_points:     input.key_points,
+    verified_facts: (input.verified_facts ?? []).map((f: any) => ({ id: f.fact_id, t: f.text })),
+    claims:         (input.claims_to_verify ?? []).map((c: any) => ({ id: c.claim_id, t: c.text })),
+    risks:          (input.risks ?? []).map((r: any) => ({ id: r.risk_id, t: r.text })),
+        ...(input.regeneration_guidance ? { guidance: input.regeneration_guidance } : {}),
+  };
+}
+
+// ── Core ──────────────────────────────────────────────────────────────────────
+
+export async function generateAngles(
+  input: any,
+  apiKeys: string[],
+): Promise<{ result: Record<string, unknown>; meta: AttemptMeta[] }> {
+  const prompt = JSON.stringify(slim(input));
+  const attempts: AttemptMeta[] = [];
+
+  for (const model of MODELS) {
+    const usedKeyIdx = (global as any).__keyIndex ?? 0;
+    const key = nextKey(apiKeys);
     try {
-        validateStep3Input(req.body);
-    } catch (e) {
-        if (e instanceof ValidationError) return fail(res, 422, "Step 3 input validation failed", e.errors);
-        throw e;
-    }
+      const res = await new GoogleGenerativeAI(key)
+        .getGenerativeModel({
+          model,
+          systemInstruction: SYS,
+          generationConfig: { responseMimeType: "application/json", responseSchema: ANGLES_SCHEMA as any },
+        })
+        .generateContent(prompt);
 
-    const { topic_id, editorial_type, sport_context } = req.body;
+      attempts.push({ model, keyIndex: usedKeyIdx });
+      return { result: JSON.parse(res.response.text()), meta: attempts };
+    } catch (err: any) {
+      attempts.push({ model, keyIndex: usedKeyIdx, error: err?.message ?? String(err) });
+      console.warn(`[angles] ${model} key#${usedKeyIdx} fail:`, err?.message);
+    }
+  }
+  throw new Error(`All models failed: ${JSON.stringify(attempts)}`);
+}
+
+const API_KEYS = loadApiKeys();
+
+  app.post("/generate-angle-step", async (req: Request, res: Response) => {
+    if (!req.body?.topic_id) { res.status(400).json({ error: "missing topic_id" }); return; }
+    try {
+      const { result, meta } = await generateAngles(req.body as any, API_KEYS);
+      res.json({ ...result, _meta: meta });
+    } catch (e: any) {
+        const { topic_id, editorial_type, sport_context } = req.body;
 
     const output = {
         topic_id: "TOPIC-2026-001",
@@ -1615,25 +1821,154 @@ app.post("/generate-angle-step", (req, res) => {
 
         status: "angles_ready",
     };
-
-    store.step3.set(topic_id, output);
-    return ok(res, output);
-});
-
-/**
- * POST /step4
- * Input:  angles_ready payload (= step3 output)
- * Output: outline_ready payload stub
- */
-app.post("/generate-outline-step", (req, res) => {
-    try {
-        validateStep4Input(req.body);
-    } catch (e) {
-        if (e instanceof ValidationError) return fail(res, 422, "Step 4 input validation failed", e.errors);
-        throw e;
+        return res.json(output);
     }
+  });
 
-    const { topic_id, editorial_type, sport_context, angle_candidates, selected_angle_id } = req.body;
+//Step 4: angles_ready → outline_ready
+// ── Schema ────────────────────────────────────────────────────────────────────
+ 
+const S = SchemaType;
+const strArr = { type: S.ARRAY, items: { type: S.STRING } };
+ 
+const OUTLINE_SCHEMA = {
+  type: S.OBJECT,
+  properties: {
+    topic_id:       { type: S.STRING },
+    editorial_type: { type: S.STRING },
+    sport_context:  { type: S.STRING },
+    angle_id:       { type: S.STRING },
+    headline_options: {
+      type: S.ARRAY,
+      items: {
+        type: S.OBJECT,
+        properties: {
+          option_id: { type: S.STRING },
+          text:      { type: S.STRING },
+          dimension: { type: S.STRING },
+          rationale: { type: S.STRING },
+        },
+        required: ["option_id", "text", "dimension", "rationale"],
+      },
+    },
+    standfirst: { type: S.STRING },
+    intro: {
+      type: S.OBJECT,
+      properties: {
+        structure_type: { type: S.STRING },
+        components: {
+          type: S.ARRAY,
+          items: {
+            type: S.OBJECT,
+            properties: { label: { type: S.STRING }, content: { type: S.STRING } },
+            required: ["label", "content"],
+          },
+        },
+      },
+      required: ["structure_type", "components"],
+    },
+    sections: {
+      type: S.ARRAY,
+      items: {
+        type: S.OBJECT,
+        properties: {
+          section_id:              { type: S.STRING },
+          title:                   { type: S.STRING },
+          goal:                    { type: S.STRING },
+          narrative_role:          { type: S.STRING },
+          connection_to_previous:  { type: S.STRING },
+          key_points_to_cover:     strArr,
+          fact_refs:               strArr,
+          claim_refs:              strArr,
+          differentiation:         { type: S.STRING },
+          length_hint:             { type: S.STRING },
+          transition_to_next:      { type: S.STRING },
+        },
+        required: ["section_id", "title", "goal", "narrative_role",
+                   "key_points_to_cover", "fact_refs", "claim_refs",
+                   "differentiation", "length_hint"],
+      },
+    },
+    conclusion: {
+      type: S.OBJECT,
+      properties: {
+        structure_type: { type: S.STRING },
+        goal:           { type: S.STRING },
+        key_takeaways:  strArr,
+      },
+      required: ["structure_type", "goal", "key_takeaways"],
+    },
+    metadata: {
+      type: S.OBJECT,
+      properties: {
+        estimated_total_words: { type: S.NUMBER },
+        primary_facts_used:    strArr,
+        primary_claims_used:   strArr,
+      },
+      required: ["estimated_total_words", "primary_facts_used", "primary_claims_used"],
+    },
+    status: { type: S.STRING },
+  },
+  required: ["topic_id", "editorial_type", "sport_context", "angle_id",
+             "headline_options", "standfirst", "intro", "sections", "conclusion",
+             "metadata", "status"],
+};
+
+const SYS4 = "Biên tập thể thao. Nhận INPUT JSON, tạo outline bài viết. Trả JSON, không giải thích. Priorily làm theo regeneration_guidance nếu có.";
+
+function slimOutline(input: Record<string, unknown>) {
+  const syn = (input.synthesis_data ?? {}) as any;
+  return {
+    topic_id:       input.topic_id,
+    editorial_type: input.editorial_type,
+    sport_context:  input.sport_context,
+    angle:          input.selected_angle,
+    problem:        syn.problem_statement,
+    key_points:     syn.key_points,
+    facts:          (syn.verified_facts ?? []).map((f: any) => ({ id: f.fact_id, t: f.text })),
+    claims:         (syn.claims_to_verify ?? []).map((c: any) => ({ id: c.claim_id, t: c.text })),
+    ...(input.regeneration_guidance ? { guidance: input.regeneration_guidance } : {}),
+  };
+}
+ 
+// ── Core ──────────────────────────────────────────────────────────────────────
+ 
+export async function generateOutline(
+  input: Record<string, unknown>,
+  apiKeys: string[],
+): Promise<{ result: Record<string, unknown>; meta: AttemptMeta[] }> {
+  const prompt = JSON.stringify(slimOutline(input));
+  const attempts: AttemptMeta[] = [];
+ 
+  for (const model of MODELS) {
+    const usedKeyIdx = (global as any).__keyIndex ?? 0;
+    const key = nextKey(apiKeys);
+    try {
+      const res = await new GoogleGenerativeAI(key)
+        .getGenerativeModel({
+          model,
+          systemInstruction: SYS4,
+          generationConfig: { responseMimeType: "application/json", responseSchema: OUTLINE_SCHEMA as any },
+        })
+        .generateContent(prompt);
+ 
+      attempts.push({ model, keyIndex: usedKeyIdx });
+      return { result: JSON.parse(res.response.text()), meta: attempts };
+    } catch (err: any) {
+      attempts.push({ model, keyIndex: usedKeyIdx, error: err?.message ?? String(err) });
+      console.warn(`[outline] ${model} key#${usedKeyIdx} fail:`, err?.message);
+    }
+  }
+  throw new Error(`All models failed: ${JSON.stringify(attempts)}`);
+}
+//STEP 4: angles_ready → outline_ready
+  app.post("/generate-outline-step", async (req: Request, res: Response) => {
+    if (!req.body?.topic_id) { res.status(400).json({ error: "missing topic_id" }); return; }
+    try {
+      const { result, meta } = await generateOutline(req.body, API_KEYS);
+      res.json({ ...result, _meta: meta });
+    } catch (e: any) {
+  const { topic_id, editorial_type, sport_context, angle_candidates, selected_angle_id } = req.body;
 
     const output = {
         topic_id: "TOPIC-2026-001",
@@ -1850,111 +2185,458 @@ app.post("/generate-outline-step", (req, res) => {
 
         status: "outline_ready",
     };
+       return res.json(output);   }
+  });
 
-    store.step4.set(topic_id, output);
-    return ok(res, output);
-});
+// health check
+app.get("/health", (_req, res) => res.json({ ok: true, keys: API_KEYS.length }));
+ 
+/**
+ * POST /step2
+ * Input:  topic_ready payload
+ * Output: synthesis_ready payload stub
+ */
+// ── JSON Schema for Gemini controlled generation ─────────────────────────────
+
+ 
+// ── System prompt ─────────────────────────────────────────────────────────────
+ 
+
+ 
+
+/**
+ * POST /step3
+ * Input:  synthesis_ready payload (= step2 output)
+ * Output: angles_ready payload stub
+ */
+// app.post("/generate-angle-step", (req, res) => {
+//     try {
+//         validateStep3Input(req.body);
+//     } catch (e) {
+//         if (e instanceof ValidationError) return fail(res, 422, "Step 3 input validation failed", e.errors);
+//         throw e;
+//     }
+
+//     const { topic_id, editorial_type, sport_context } = req.body;
+
+//     const output = {
+//         topic_id: "TOPIC-2026-001",
+
+//         editorial_type: {
+//             id: "match-analysis",
+//             label: "Match Analysis",
+//         },
+
+//         sport_context: {
+//             sport: "football",
+//             league: "Premier League",
+//             season: "2025/26",
+//             teams: ["Arsenal", "Manchester City"],
+//         },
+
+//         angle_candidates: [
+//             {
+//                 angle_id: "ANG-001",
+
+//                 title:
+//                     "Vì sao Arsenal hụt hơi trước Manchester City ở giai đoạn quyết định?",
+
+//                 central_question:
+//                     "Điều gì khiến Arsenal đánh mất lợi thế trong cuộc đua vô địch Premier League?",
+
+//                 differentiation:
+//                     "Tập trung vào yếu tố chiến thuật và chiều sâu đội hình thay vì chỉ nhìn vào kết quả thi đấu.",
+
+//                 fit_reason:
+//                     "Angle này phù hợp với nhóm độc giả muốn hiểu nguyên nhân chiến thuật phía sau cuộc đua vô địch.",
+
+//                 confidence_tag: "safe",
+
+//                 warning: null,
+
+//                 fact_coverage: {
+//                     verified_facts_used: ["F-001", "F-002", "F-003"],
+//                     claims_used: ["C-001"],
+//                     must_points_covered: ["KP-001", "KP-002"],
+//                 },
+//             },
+
+//             {
+//                 angle_id: "ANG-002",
+
+//                 title:
+//                     "Pep Guardiola đã điều chỉnh Manchester City như thế nào để vượt Arsenal?",
+
+//                 central_question:
+//                     "Các thay đổi chiến thuật nào giúp Manchester City duy trì sự ổn định cuối mùa?",
+
+//                 differentiation:
+//                     "Đào sâu vào cách Pep Guardiola tối ưu pressing và kiểm soát bóng.",
+
+//                 fit_reason:
+//                     "Phù hợp với độc giả yêu thích tactical analysis và dữ liệu chuyên sâu.",
+
+//                 confidence_tag: "balanced",
+
+//                 warning:
+//                     "Một số nhận định chiến thuật vẫn cần xác minh thêm từ nguồn phân tích chuyên môn.",
+
+//                 fact_coverage: {
+//                     verified_facts_used: ["F-001"],
+//                     claims_used: ["C-001"],
+//                     must_points_covered: ["KP-001"],
+//                 },
+//             },
+
+//             {
+//                 angle_id: "ANG-003",
+
+//                 title:
+//                     "Arsenal có thực sự thiếu bản lĩnh vô địch Premier League?",
+
+//                 central_question:
+//                     "Liệu vấn đề của Arsenal nằm ở tâm lý hay chất lượng đội hình?",
+
+//                 differentiation:
+//                     "Khai thác góc nhìn tâm lý thi đấu và áp lực đường dài thay vì thuần chiến thuật.",
+
+//                 fit_reason:
+//                     "Angle này dễ tạo tranh luận và tăng tương tác cộng đồng.",
+
+//                 confidence_tag: "risky",
+
+//                 warning:
+//                     "Dễ mang tính suy đoán nếu không có phát biểu trực tiếp từ cầu thủ hoặc HLV.",
+
+//                 fact_coverage: {
+//                     verified_facts_used: ["F-002", "F-003"],
+//                     claims_used: [],
+//                     must_points_covered: ["KP-002", "KP-003"],
+//                 },
+//             },
+//         ],
+
+//         selected_angle_id: null,
+
+//         regeneration_guidance: null,
+
+//         status: "angles_ready",
+//     };
+
+//     store.step3.set(topic_id, output);
+//     return ok(res, output);
+// });
+
+/**
+ * POST /step4
+ * Input:  angles_ready payload (= step3 output)
+ * Output: outline_ready payload stub
+ */
+// app.post("/generate-outline-step", (req, res) => {
+//     try {
+//         validateStep4Input(req.body);
+//     } catch (e) {
+//         if (e instanceof ValidationError) return fail(res, 422, "Step 4 input validation failed", e.errors);
+//         throw e;
+//     }
+
+//     const { topic_id, editorial_type, sport_context, angle_candidates, selected_angle_id } = req.body;
+
+//     const output = {
+//         topic_id: "TOPIC-2026-001",
+
+//         editorial_type: {
+//             id: "match-analysis",
+//             label: "Match Analysis",
+//         },
+
+//         sport_context: {
+//             sport: "football",
+//             league: "Premier League",
+//             season: "2025/26",
+//             teams: ["Arsenal", "Manchester City"],
+//         },
+
+//         angle_id: "ANG-001",
+
+//         headline_options: [
+//             {
+//                 option_id: "HL-001",
+//                 text:
+//                     "Vì sao Arsenal hụt hơi trước Manchester City ở giai đoạn quyết định?",
+//                 dimension: "dat_cau_hoi",
+//                 rationale:
+//                     "Tạo sự tò mò và đánh đúng mối quan tâm của fan Premier League.",
+//             },
+
+//             {
+//                 option_id: "HL-002",
+//                 text:
+//                     "Manchester City đã vượt Arsenal bằng bản lĩnh hay chiều sâu đội hình?",
+//                 dimension: "insight",
+//                 rationale:
+//                     "Nhấn mạnh yếu tố phân tích thay vì chỉ phản ánh kết quả.",
+//             },
+
+//             {
+//                 option_id: "HL-003",
+//                 text:
+//                     "Arsenal lại gục ngã trong cuộc đua vô địch Premier League",
+//                 dimension: "truc_dien",
+//                 rationale:
+//                     "Tiêu đề trực diện, dễ tiếp cận với nhóm độc giả đại chúng.",
+//             },
+//         ],
+
+//         selected_headline_id: null,
+
+//         standfirst:
+//             "Arsenal từng có thời điểm nắm lợi thế lớn trong cuộc đua vô địch Premier League 2025/26. Tuy nhiên, sự ổn định, chiều sâu đội hình và khả năng kiểm soát trận đấu của Manchester City đã tạo ra khác biệt ở giai đoạn quyết định.",
+
+//         intro: {
+//             structure_type: "hook_problem",
+
+//             components: [
+//                 {
+//                     label: "hook",
+//                     content:
+//                         "Khi Premier League bước vào giai đoạn cuối mùa, áp lực bắt đầu bào mòn mọi sai lầm nhỏ nhất.",
+//                 },
+
+//                 {
+//                     label: "problem",
+//                     content:
+//                         "Arsenal một lần nữa đánh mất lợi thế trong cuộc đua vô địch dù từng dẫn đầu bảng xếp hạng.",
+//                 },
+
+//                 {
+//                     label: "direction",
+//                     content:
+//                         "Khác biệt không chỉ nằm ở kết quả, mà còn ở cách Manchester City duy trì sự ổn định chiến thuật và chiều sâu đội hình.",
+//                 },
+//             ],
+//         },
+
+//         sections: [
+//             {
+//                 section_id: "SEC-001",
+
+//                 title:
+//                     "Arsenal đã đánh mất quyền kiểm soát cuộc đua như thế nào?",
+
+//                 goal:
+//                     "Thiết lập bối cảnh cuộc đua vô địch và thời điểm Arsenal bắt đầu sa sút.",
+
+//                 narrative_role: "thiet_lap",
+
+//                 connection_to_previous: null,
+
+//                 key_points_to_cover: ["KP-001"],
+
+//                 fact_refs: ["F-001", "F-002"],
+
+//                 claim_refs: [],
+
+//                 differentiation:
+//                     "Tập trung vào diễn biến cuộc đua thay vì chỉ thống kê kết quả.",
+
+//                 length_hint: "trung bình",
+
+//                 transition_to_next:
+//                     "Sự sa sút đó bắt nguồn từ nhiều vấn đề chiến thuật và nhân sự.",
+//             },
+
+//             {
+//                 section_id: "SEC-002",
+
+//                 title:
+//                     "Chiều sâu đội hình trở thành khác biệt lớn nhất",
+
+//                 goal:
+//                     "Phân tích ảnh hưởng của chấn thương và khả năng xoay tua đội hình.",
+
+//                 narrative_role: "phat_trien",
+
+//                 connection_to_previous:
+//                     "Sau khi mất lợi thế, Arsenal bắt đầu bộc lộ giới hạn lực lượng.",
+
+//                 key_points_to_cover: ["KP-002"],
+
+//                 fact_refs: ["F-003"],
+
+//                 claim_refs: [],
+
+//                 differentiation:
+//                     "Nhấn mạnh yếu tố thể lực và lịch thi đấu dày đặc cuối mùa.",
+
+//                 length_hint: "dài",
+
+//                 transition_to_next:
+//                     "Nhưng chiều sâu đội hình chỉ là một phần của vấn đề.",
+//             },
+
+//             {
+//                 section_id: "SEC-003",
+
+//                 title:
+//                     "Manchester City duy trì sự ổn định chiến thuật ra sao?",
+
+//                 goal:
+//                     "Làm rõ cách Pep Guardiola điều chỉnh chiến thuật ở giai đoạn cuối mùa.",
+
+//                 narrative_role: "doi_chieu",
+
+//                 connection_to_previous:
+//                     "Trong khi Arsenal hụt hơi, Manchester City lại tăng tốc đúng thời điểm.",
+
+//                 key_points_to_cover: ["KP-001", "KP-003"],
+
+//                 fact_refs: ["F-001"],
+
+//                 claim_refs: ["C-001"],
+
+//                 differentiation:
+//                     "Đưa góc nhìn tactical analysis thay vì narrative thông thường.",
+
+//                 length_hint: "dài",
+
+//                 transition_to_next:
+//                     "Những khác biệt đó dẫn tới câu hỏi lớn hơn về bản lĩnh vô địch.",
+//             },
+
+//             {
+//                 section_id: "SEC-004",
+
+//                 title:
+//                     "Đây là thất bại chiến thuật hay vấn đề bản lĩnh?",
+
+//                 goal:
+//                     "Mở rộng tranh luận sang yếu tố tâm lý và kinh nghiệm đường dài.",
+
+//                 narrative_role: "mo_rong",
+
+//                 connection_to_previous:
+//                     "Yếu tố chiến thuật không hoàn toàn giải thích được cú hụt hơi của Arsenal.",
+
+//                 key_points_to_cover: ["KP-003"],
+
+//                 fact_refs: ["F-002"],
+
+//                 claim_refs: [],
+
+//                 differentiation:
+//                     "Kết hợp góc nhìn tâm lý thi đấu với phân tích chuyên môn.",
+
+//                 length_hint: "trung bình",
+
+//                 transition_to_next:
+//                     "Dù nguyên nhân là gì, Arsenal vẫn đang đứng trước một bài toán lớn cho mùa giải tới.",
+//             },
+//         ],
+
+//         conclusion: {
+//             structure_type: "ket_phan_tich",
+
+//             goal:
+//                 "Tổng hợp nguyên nhân Arsenal thất bại và mở ra góc nhìn cho mùa giải tiếp theo.",
+
+//             key_takeaways: [
+//                 "Manchester City tạo khác biệt bằng sự ổn định và chiều sâu đội hình.",
+//                 "Arsenal vẫn thiếu kinh nghiệm duy trì áp lực vô địch đường dài.",
+//                 "Cuộc đua mùa tới sẽ phụ thuộc vào khả năng nâng cấp lực lượng của Arsenal.",
+//             ],
+//         },
+
+//         metadata: {
+//             estimated_total_words: 1800,
+
+//             primary_facts_used: ["F-001", "F-002", "F-003"],
+
+//             primary_claims_used: ["C-001"],
+//         },
+
+//         status: "outline_ready",
+//     };
+
+//     store.step4.set(topic_id, output);
+//     return ok(res, output);
+// });
 // server.ts
-app.post("/suggest-topic", async (req: Request, res: Response) => {
-    const { briefing } = req.body as { briefing: string };
 
-    if (!briefing?.trim()) {
-        return res.status(400).json({ error: "briefing is required" });
-    }
-
-    const prompt = `
-You are a sports editorial assistant. Analyze the following briefing and extract structured topic metadata.
-
-Briefing:
-"""
-${briefing}
-"""
-
-Respond ONLY with a valid JSON object matching this structure (no markdown, no explanation):
-{
-  "editorialType": { "value": "<one of: news|analysis|opinion|preview|review|interview|feature>", "label": "<human readable>", "confidence": "<high|medium|low>" },
-  "sport": { "value": "<sport name>", "confidence": "<high|medium|low>" },
-  "league": { "value": "<league name>", "confidence": "<high|medium|low>" },
-  "audience": { "value": ["<segment1>", "..."], "confidence": "<high|medium|low>" },
-  "keywords": { "value": ["<kw1>", "..."], "confidence": "<high|medium|low>" },
-  "warnings": ["<optional warning string>"]
-}
-
-Rules:
-- Omit any field you cannot reasonably infer (do not guess with low signal).
-- "warnings" should note ambiguities, missing context, or conflicting signals.
-- "confidence" reflects how clearly the briefing supports the value.
-`;
-
-    try {
-        const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1000,
-            messages: [{ role: "user", content: prompt }],
-        });
-
-        const raw = response.content
-            .filter((b) => b.type === "text")
-            .map((b) => (b as { type: "text"; text: string }).text)
-            .join("");
-
-        const suggestion = JSON.parse(raw);
-        return res.json(suggestion);
-    } catch (err) {
-        console.error("suggest-topic error:", err);
-        return res.status(500).json({ error: "Failed to analyze briefing" });
-    }
-});
 //  | "verified"
 //   | "warning"
 //   | "unknown"
 //   | "recommended"
 //   | "alternative"
 //   | "risky";
-app.post("/generate-suggestion-step", (req, res) => {
-    return res.json({
-        editorialType: {
-            value: "match-analysis",
-            label: "Match Analysis",
-            confidence: "unknown",
-        },
+app.post("/generate-suggestion-step", async (req, res) => {
+  const FALLBACK = {
+    editorialType: {
+      value: "match-analysis",
+      label: "Match Analysis",
+      confidence: "unknown",
+    },
+    sport: {
+      value: "football",
+      confidence: "alternative",
+    },
+    league: {
+      value: "Premier League",
+      confidence: "verified",
+    },
+    audience: {
+      value: [
+        "football fans",
+        "fantasy premier league players",
+        "sports bettors",
+      ],
+      confidence: "warning",
+    },
+    keywords: {
+      value: [
+        "Arsenal vs Chelsea",
+        "title race",
+        "xG analysis",
+        "tactical breakdown",
+      ],
+      confidence: "risky",
+    },
+    warnings: [
+      "Injury reports may change before kickoff",
+      "Lineup predictions are speculative",
+    ],
+  };
 
-        sport: {
-            value: "football",
-            confidence: "alternative",
-        },
+  try {
+    const { briefing = "" } = req.body;
 
-        league: {
-            value: "Premier League",
-            confidence: "verified",
-        },
+    const systemPrompt = `
+Return only JSON:
+{"editorialType":{"value":"","label":"","confidence":""},"sport":{"value":"","confidence":""},"league":{"value":"","confidence":""},"audience":{"value":[],"confidence":""},"keywords":{"value":[],"confidence":""},"warnings":[]}
 
-        audience: {
-            value: [
-                "football fans",
-                "fantasy premier league players",
-                "sports bettors",
-            ],
-            confidence: "warning",
-        },
+Extract from sports briefing.
+Unknown=>""|[].
+confidence=verified|alternative|warning|risky|unknown.
+`;
 
-        keywords: {
-            value: [
-                "Arsenal vs Chelsea",
-                "title race",
-                "xG analysis",
-                "tactical breakdown",
-            ],
-            confidence: "risky",
-        },
-
-        warnings: [
-            "Injury reports may change before kickoff",
-            "Lineup predictions are speculative",
-        ],
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
+      contents: briefing,
     });
 
-})
+    const suggestion = JSON.parse(result.text);
+
+    return res.json(suggestion);
+  } catch (error) {
+    console.error("generate-suggestion-step:", error);
+return res.json(FALLBACK);
+  }
+});
 app.use("", writingStepRouter); // → POST /api/writing-step
 // ─────────────────────────────────────────────
 // ERROR MIDDLEWARE
